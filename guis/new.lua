@@ -5986,7 +5986,7 @@ function mainapi:CreateSearch()
 	searchlegit.Position = UDim2.new(0.5, 4, 0, -1)
 	searchlegit.BackgroundTransparency = 1
 	searchlegit.FontFace = uipallet.Font
-	searchlegit.Text = 'Legit'
+	searchlegit.Text = ''
 	searchlegit.AnchorPoint = Vector2.new(0.5, 0)
 	searchlegit.TextSize = 14
 	searchlegit.Parent = searchbkg
