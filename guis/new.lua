@@ -1233,11 +1233,6 @@ components = {
 			end
 			safecall(optionsettings.Function, self.Value, mouse)
 		end
-
-		function optionapi:SyncValue(val)
-			self.Value = table.find(optionsettings.List, val) and val or optionsettings.List[1] or 'None'
-			title.Text = '         '..optionsettings.Name..' - '..self.Value
-		end
 		
 		button.MouseButton1Click:Connect(function()
 			if not dropdownchildren then
@@ -4363,11 +4358,7 @@ function mainapi:CreateCategory(categorysettings)
 				if source.Type == 'Slider' then
 					target:SetValue(source.Value, nil, true)
 				elseif source.Type == 'Dropdown' then
-					if target.SyncValue then
-						target:SyncValue(source.Value)
-					else
-						target:SetValue(source.Value)
-					end
+					target:SetValue(source.Value)
 				elseif source.Type == 'Toggle' then
 					if target.Enabled ~= source.Enabled then
 						target:Toggle()
@@ -4548,6 +4539,12 @@ function mainapi:CreateCategory(categorysettings)
 					if favoriteOption then
 						moduleapi.FavoriteOptions[optionName] = favoriteOption
 						syncOptionState(favoriteOption, mainOption)
+						if mainOption.Object and favoriteOption.Object then
+							favoriteOption.Object.Visible = mainOption.Object.Visible
+							mainOption.Object:GetPropertyChangedSignal('Visible'):Connect(function()
+								favoriteOption.Object.Visible = mainOption.Object.Visible
+							end)
+						end
 					end
 				elseif optionName and i == 'Button' then
 					local favoriteSettings = cloneSettings(settings)
