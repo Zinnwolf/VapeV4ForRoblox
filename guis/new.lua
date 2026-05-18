@@ -3966,7 +3966,7 @@ function mainapi:CreateCategory(categorysettings)
 	local hiddenDoneButton = Instance.new('TextButton')
 	hiddenDoneButton.Name = 'DoneHiddenModules'
 	hiddenDoneButton.Size = UDim2.fromOffset(58, 40)
-	hiddenDoneButton.Position = UDim2.new(1, -90, 0, 0)
+	hiddenDoneButton.Position = UDim2.new(1, -75, 0, 0)
 	hiddenDoneButton.BackgroundTransparency = 1
 	hiddenDoneButton.AutoButtonColor = false
 	hiddenDoneButton.Visible = false
