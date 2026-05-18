@@ -483,6 +483,20 @@ local function makeDraggable(gui, window)
 	local ended
 	local renderConnection
 
+	local function getInputPosition(inputObj)
+		local inset = guiService:GetGuiInset()
+		return Vector2.new(inputObj.Position.X, inputObj.Position.Y - inset.Y) / scale.Scale
+	end
+
+	local function getOffsetPosition()
+		local parent = gui.Parent
+		local parentSize = parent and parent.AbsoluteSize or Vector2.new()
+		return Vector2.new(
+			gui.Position.X.Offset + ((parentSize.X / scale.Scale) * gui.Position.X.Scale),
+			gui.Position.Y.Offset + ((parentSize.Y / scale.Scale) * gui.Position.Y.Scale)
+		)
+	end
+
 	local function stopRenderIfDone()
 		if renderConnection and not dragging and currentPosition and targetPosition and (currentPosition - targetPosition).Magnitude < 0.45 then
 			gui.Position = UDim2.fromOffset(targetPosition.X, targetPosition.Y)
@@ -517,23 +531,20 @@ local function makeDraggable(gui, window)
 			and (inputObj.Position.Y - gui.AbsolutePosition.Y < 40 or window)
 		then
 			dragging = true
-			dragPosition = Vector2.new(
-				gui.AbsolutePosition.X - inputObj.Position.X,
-				gui.AbsolutePosition.Y - inputObj.Position.Y + guiService:GetGuiInset().Y
-			) / scale.Scale
-
-			currentPosition = Vector2.new(gui.Position.X.Offset, gui.Position.Y.Offset)
+			currentPosition = getOffsetPosition()
 			targetPosition = currentPosition
+			dragPosition = currentPosition - getInputPosition(inputObj)
+			gui.Position = UDim2.fromOffset(currentPosition.X, currentPosition.Y)
 			startRenderLoop()
 
 			changed = inputService.InputChanged:Connect(function(input)
 				if input.UserInputType == (inputObj.UserInputType == Enum.UserInputType.MouseButton1 and Enum.UserInputType.MouseMovement or Enum.UserInputType.Touch) then
-					local position = input.Position
+					local position = getInputPosition(input)
 					if inputService:IsKeyDown(Enum.KeyCode.LeftShift) then
 						dragPosition = (dragPosition // 3) * 3
 						position = (position // 3) * 3
 					end
-					targetPosition = Vector2.new((position.X / scale.Scale) + dragPosition.X, (position.Y / scale.Scale) + dragPosition.Y)
+					targetPosition = position + dragPosition
 				end
 			end)
 
@@ -3005,7 +3016,7 @@ function mainapi:CreateGUI()
 		favoritesButton.BackgroundTransparency = 1
 		favoritesButton.AutoButtonColor = false
 		favoritesButton.Image = getcustomasset('newvape/assets/new/favoriteoff.png')
-		favoritesButton.ImageColor3 = Color3.new(1, 1, 1)
+		favoritesButton.ImageColor3 = color.Light(uipallet.Main, 0.37)
 		favoritesButton.Parent = bar
 		addTooltip(favoritesButton, 'Open favorites')
 
@@ -3902,7 +3913,7 @@ function mainapi:CreateCategory(categorysettings)
 		icon.Position = UDim2.fromOffset(12, 8)
 		icon.ImageTransparency = 0
 		icon.Image = getcustomasset('newvape/assets/new/favoriteofftab.png')
-		icon.ImageColor3 = Color3.new(1, 1, 1)
+		icon.ImageColor3 = color.Light(uipallet.Main, 0.37)
 	end
 	local title = Instance.new('TextLabel')
 	title.Name = 'Title'
@@ -4723,19 +4734,17 @@ end
 function mainapi:AnimateStarColor(star, active, hover)
 	if not star then return end
 
+	local target = active and Color3.new(1, 1, 1) or (hover and color.Dark(uipallet.Text, 0.16) or color.Light(uipallet.Main, 0.37))
+
 	if star:IsA('ImageButton') or star:IsA('ImageLabel') then
 		star.Image = self:GetFavoriteStarAsset(active)
-
-		-- Both favoriteon.png and favoriteoff.png already carry their own colors.
-		-- Do NOT tint them again or they become too dark.
 		tween:Tween(star, TweenInfo.new(0.16, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-			ImageColor3 = Color3.new(1, 1, 1),
+			ImageColor3 = target,
 			ImageTransparency = 0
 		})
 		return
 	end
 
-	local target = active and Color3.fromRGB(255, 170, 42) or (hover and color.Dark(uipallet.Text, 0.16) or color.Light(uipallet.Main, 0.37))
 	tween:Tween(star, TweenInfo.new(0.16, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
 		TextColor3 = target
 	})
