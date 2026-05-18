@@ -57,8 +57,8 @@ local tween = {
 	tweenstwo = {}
 }
 local uipallet = {
-	Main = Color3.fromRGB(26, 25, 26),--26, 25, 26
-	Text = Color3.fromRGB(200, 200, 200),--200, 200, 200
+	Main = Color3.fromRGB(26, 25, 26),
+	Text = Color3.fromRGB(200, 200, 200),-
 	Font = Font.fromEnum(Enum.Font.Arial),
 	FontSemiBold = Font.fromEnum(Enum.Font.Arial, Enum.FontWeight.SemiBold),
 	Tween = TweenInfo.new(0.16, Enum.EasingStyle.Linear)
@@ -68,7 +68,7 @@ local getcustomassets = {
 	['newvape/assets/new/add.png'] = 'rbxassetid://14368300605',
 	['newvape/assets/new/alert.png'] = 'rbxassetid://14368301329',
 	['newvape/assets/new/allowedicon.png'] = 'rbxassetid://14368302000',
-	['newvape/assets/new/mascot.png'] = 'rbxassetid://14373395239', -- Cat-only name remapped to original Vape icon
+	['newvape/assets/new/mascot.png'] = 'rbxassetid://14373395239',
 	['newvape/assets/new/allowedtab.png'] = 'rbxassetid://14368302875',
 	['newvape/assets/new/arrowmodule.png'] = 'rbxassetid://14473354880',
 	['newvape/assets/new/back.png'] = 'rbxassetid://14368303894',
@@ -79,7 +79,7 @@ local getcustomassets = {
 	['newvape/assets/new/blockedtab.png'] = 'rbxassetid://14385672881',
 	['newvape/assets/new/blur.png'] = 'rbxassetid://14898786664',
 	['newvape/assets/new/blurnotif.png'] = 'rbxassetid://16738720137',
-	['newvape/assets/new/catv5.png'] = 'rbxassetid://14373395239', -- Cat-only name remapped to original Vape icon
+	['newvape/assets/new/catv5.png'] = 'rbxassetid://14373395239', 
 	['newvape/assets/new/close.png'] = 'rbxassetid://14368309446',
 	['newvape/assets/new/closemini.png'] = 'rbxassetid://14368310467',
 	['newvape/assets/new/colorpreview.png'] = 'rbxassetid://14368311578',
@@ -343,7 +343,6 @@ local function createMobileButton(buttonapi, position)
 end
 
 local function downloadFile(path, func)
-	-- Original Vape is the default asset source.
 	local originalPath = path
 	local sourcePath = path
 
@@ -363,7 +362,6 @@ local function downloadFile(path, func)
 			return game:HttpGet('https://raw.githubusercontent.com/7GrandDadPGN/VapeV4ForRoblox/'..readfile('newvape/profiles/commit.txt')..'/'..select(1, sourcePath:gsub('newvape/', '')), true)
 		end)
 
-		-- Do not hard-crash the whole UI over a missing image.
 		if not suc or res == '404: Not Found' or res == nil or res == '' then
 			local fallback = getcustomassets[originalPath]
 			if fallback and fallback ~= '' then
@@ -2982,8 +2980,6 @@ function mainapi:CreateGUI()
 	end
 
 	function categoryapi:CreateFavoritesBar()
-		-- Favorites is visually mounted inside the bottom overlays bar, like real Vape.
-		-- This stub keeps the old call order safe without creating an extra row.
 		mainapi.Favorites.WaitingForOverlayBar = true
 		return nil
 	end
@@ -3966,7 +3962,7 @@ function mainapi:CreateCategory(categorysettings)
 	local hiddenDoneButton = Instance.new('TextButton')
 	hiddenDoneButton.Name = 'DoneHiddenModules'
 	hiddenDoneButton.Size = UDim2.fromOffset(58, 40)
-	hiddenDoneButton.Position = UDim2.new(1, -90, 0, 0)
+	hiddenDoneButton.Position = UDim2.new(1, -75, 0, 0)
 	hiddenDoneButton.BackgroundTransparency = 1
 	hiddenDoneButton.AutoButtonColor = false
 	hiddenDoneButton.Visible = false
@@ -7494,7 +7490,6 @@ function mainapi:CreateProfileGUI()
 			end
 			fr = false
 		end
-		--visibleCheck()
 	end)
 	gridlayout:GetPropertyChangedSignal('AbsoluteContentSize'):Connect(function()
 		if self.ThreadFix then
@@ -7947,7 +7942,7 @@ gui.ZIndexBehavior = Enum.ZIndexBehavior.Global
 gui.IgnoreGuiInset = true
 gui.OnTopOfCoreBlur = true
 if false then
-	gui.Parent = cloneref(game:GetService('CoreGui'))--(gethui and gethui()) or cloneref(game:GetService('CoreGui'))
+	gui.Parent = cloneref(game:GetService('CoreGui')
 else
 	gui.Parent = lplr.PlayerGui
 	gui.ResetOnSpawn = false
