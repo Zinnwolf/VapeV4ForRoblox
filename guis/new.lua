@@ -23,7 +23,7 @@ local mainapi = {
 	Scale = {Value = 1},
 	ThreadFix = setthreadidentity and true or false,
 	ToggleNotifications = {},
-	Version = '4.18',
+	Version = '6.00',
 	Windows = {}
 }
 
@@ -57,8 +57,8 @@ local tween = {
 	tweenstwo = {}
 }
 local uipallet = {
-	Main = Color3.fromRGB(26, 25, 26),
-	Text = Color3.fromRGB(200, 200, 200),
+	Main = Color3.fromRGB(26, 25, 26),--26, 25, 26
+	Text = Color3.fromRGB(200, 200, 200),--200, 200, 200
 	Font = Font.fromEnum(Enum.Font.Arial),
 	FontSemiBold = Font.fromEnum(Enum.Font.Arial, Enum.FontWeight.SemiBold),
 	Tween = TweenInfo.new(0.16, Enum.EasingStyle.Linear)
@@ -68,6 +68,7 @@ local getcustomassets = {
 	['newvape/assets/new/add.png'] = 'rbxassetid://14368300605',
 	['newvape/assets/new/alert.png'] = 'rbxassetid://14368301329',
 	['newvape/assets/new/allowedicon.png'] = 'rbxassetid://14368302000',
+	['newvape/assets/new/mascot.png'] = 'rbxassetid://14373395239', -- Cat-only name remapped to original Vape icon
 	['newvape/assets/new/allowedtab.png'] = 'rbxassetid://14368302875',
 	['newvape/assets/new/arrowmodule.png'] = 'rbxassetid://14473354880',
 	['newvape/assets/new/back.png'] = 'rbxassetid://14368303894',
@@ -78,6 +79,7 @@ local getcustomassets = {
 	['newvape/assets/new/blockedtab.png'] = 'rbxassetid://14385672881',
 	['newvape/assets/new/blur.png'] = 'rbxassetid://14898786664',
 	['newvape/assets/new/blurnotif.png'] = 'rbxassetid://16738720137',
+	['newvape/assets/new/catv5.png'] = 'rbxassetid://14373395239', -- Cat-only name remapped to original Vape icon
 	['newvape/assets/new/close.png'] = 'rbxassetid://14368309446',
 	['newvape/assets/new/closemini.png'] = 'rbxassetid://14368310467',
 	['newvape/assets/new/colorpreview.png'] = 'rbxassetid://14368311578',
@@ -172,7 +174,11 @@ local function safecall(func, ...)
 	local args = {...}
 	xpcall(function()
 		func(unpack(args))
-	end, function() end)
+	end, function(err)
+		if (shared and shared.VapeDeveloper) or getgenv().VapeDeveloper then
+			warn(err)
+		end
+	end)
 end
 
 local function addCloseButton(parent, offset)
@@ -337,11 +343,13 @@ local function createMobileButton(buttonapi, position)
 end
 
 local function downloadFile(path, func)
-	
+	-- Original Vape is the default asset source.
 	local originalPath = path
 	local sourcePath = path
 
 	local remapToOriginal = {
+		['newvape/assets/new/mascot.png'] = 'newvape/assets/new/vape.png',
+		['newvape/assets/new/catv5.png'] = 'newvape/assets/new/vape.png'
 	}
 
 	if remapToOriginal[sourcePath] then
@@ -355,7 +363,7 @@ local function downloadFile(path, func)
 			return game:HttpGet('https://raw.githubusercontent.com/7GrandDadPGN/VapeV4ForRoblox/'..readfile('newvape/profiles/commit.txt')..'/'..select(1, sourcePath:gsub('newvape/', '')), true)
 		end)
 
-		
+		-- Do not hard-crash the whole UI over a missing image.
 		if not suc or res == '404: Not Found' or res == nil or res == '' then
 			local fallback = getcustomassets[originalPath]
 			if fallback and fallback ~= '' then
@@ -475,10 +483,6 @@ local function makeDraggable(gui, window)
 	local ended
 	local renderConnection
 
-	local function getAbsolutePosition()
-		return Vector2.new(gui.AbsolutePosition.X / scale.Scale, gui.AbsolutePosition.Y / scale.Scale)
-	end
-
 	local function stopRenderIfDone()
 		if renderConnection and not dragging and currentPosition and targetPosition and (currentPosition - targetPosition).Magnitude < 0.45 then
 			gui.Position = UDim2.fromOffset(targetPosition.X, targetPosition.Y)
@@ -513,10 +517,13 @@ local function makeDraggable(gui, window)
 			and (inputObj.Position.Y - gui.AbsolutePosition.Y < 40 or window)
 		then
 			dragging = true
-			currentPosition = getAbsolutePosition()
+			dragPosition = Vector2.new(
+				gui.AbsolutePosition.X - inputObj.Position.X,
+				gui.AbsolutePosition.Y - inputObj.Position.Y + guiService:GetGuiInset().Y
+			) / scale.Scale
+
+			currentPosition = Vector2.new(gui.Position.X.Offset, gui.Position.Y.Offset)
 			targetPosition = currentPosition
-			gui.Position = UDim2.fromOffset(currentPosition.X, currentPosition.Y)
-			dragPosition = currentPosition - Vector2.new(inputObj.Position.X / scale.Scale, inputObj.Position.Y / scale.Scale)
 			startRenderLoop()
 
 			changed = inputService.InputChanged:Connect(function(input)
@@ -526,7 +533,7 @@ local function makeDraggable(gui, window)
 						dragPosition = (dragPosition // 3) * 3
 						position = (position // 3) * 3
 					end
-					targetPosition = Vector2.new(position.X / scale.Scale, position.Y / scale.Scale) + dragPosition
+					targetPosition = Vector2.new((position.X / scale.Scale) + dragPosition.X, (position.Y / scale.Scale) + dragPosition.Y)
 				end
 			end)
 
@@ -1791,9 +1798,12 @@ components = {
 				tooltipicon:Destroy()
 			end
 			if self.Enabled then
-				
-
-
+				--[[tooltipicon = Instance.new('ImageLabel')
+				tooltipicon.Size = optionsettings.ToolSize
+				tooltipicon.BackgroundTransparency = 1
+				tooltipicon.Image = optionsettings.ToolIcon
+				tooltipicon.ImageColor3 = uipallet.Text
+				tooltipicon.Parent = optionsettings.IconParent]]
 				tooltipicon = Instance.new('TextLabel')
 				tooltipicon.BackgroundTransparency = 1
 				tooltipicon.Size = UDim2.fromOffset(textService:GetTextSize(optionsettings.Tooltip, 14, Enum.Font.Arial, Vector2.new(1000, 1000)).X, 12)
@@ -2961,8 +2971,8 @@ function mainapi:CreateGUI()
 	end
 
 	function categoryapi:CreateFavoritesBar()
-		
-		
+		-- Favorites is visually mounted inside the bottom overlays bar, like real Vape.
+		-- This stub keeps the old call order safe without creating an extra row.
 		mainapi.Favorites.WaitingForOverlayBar = true
 		return nil
 	end
@@ -2988,16 +2998,14 @@ function mainapi:CreateGUI()
 		addCorner(button, UDim.new(1, 0))
 		addTooltip(button, 'Open overlays menu')
 
-		local favoritesButton = Instance.new('TextButton')
+		local favoritesButton = Instance.new('ImageButton')
 		favoritesButton.Name = 'FavoritesButton'
 		favoritesButton.Size = UDim2.fromOffset(21, 21)
 		favoritesButton.Position = UDim2.new(1, -52, 0, 8)
 		favoritesButton.BackgroundTransparency = 1
 		favoritesButton.AutoButtonColor = false
-		favoritesButton.Text = '★'
-		favoritesButton.TextSize = 22
-		favoritesButton.FontFace = uipallet.FontSemiBold
-		favoritesButton.TextColor3 = color.Light(uipallet.Main, 0.37)
+		favoritesButton.Image = getcustomasset('newvape/assets/new/favoriteoff.png')
+		favoritesButton.ImageColor3 = Color3.new(1, 1, 1)
 		favoritesButton.Parent = bar
 		addTooltip(favoritesButton, 'Open favorites')
 
@@ -3891,17 +3899,10 @@ function mainapi:CreateCategory(categorysettings)
 	icon.ImageColor3 = uipallet.Text
 	icon.Parent = window
 	if categorysettings.StarIcon then
-		icon:Destroy()
-		icon = Instance.new('TextLabel')
-		icon.Name = 'Icon'
-		icon.Size = UDim2.fromOffset(25, 25)
-		icon.Position = UDim2.fromOffset(12, 6)
-		icon.BackgroundTransparency = 1
-		icon.Text = '★'
-		icon.TextSize = 22
-		icon.TextColor3 = Color3.fromRGB(255, 170, 42)
-		icon.FontFace = uipallet.FontSemiBold
-		icon.Parent = window
+		icon.Position = UDim2.fromOffset(12, 8)
+		icon.ImageTransparency = 0
+		icon.Image = getcustomasset('newvape/assets/new/favoriteofftab.png')
+		icon.ImageColor3 = Color3.new(1, 1, 1)
 	end
 	local title = Instance.new('TextLabel')
 	title.Name = 'Title'
@@ -4711,18 +4712,30 @@ function mainapi:IsFavorite(name)
 	return self.Favorites and self.Favorites.List and table.find(self.Favorites.List, name) ~= nil
 end
 
+function mainapi:GetFavoriteStarAsset(active)
+	if active then
+		return getcustomasset('newvape/assets/new/favoriteon.png')
+	end
+
+	return getcustomasset('newvape/assets/new/favoriteoff.png')
+end
+
 function mainapi:AnimateStarColor(star, active, hover)
 	if not star then return end
 
-	local target = active and Color3.fromRGB(255, 170, 42) or (hover and color.Dark(uipallet.Text, 0.16) or color.Light(uipallet.Main, 0.37))
 	if star:IsA('ImageButton') or star:IsA('ImageLabel') then
+		star.Image = self:GetFavoriteStarAsset(active)
+
+		-- Both favoriteon.png and favoriteoff.png already carry their own colors.
+		-- Do NOT tint them again or they become too dark.
 		tween:Tween(star, TweenInfo.new(0.16, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-			ImageColor3 = target,
+			ImageColor3 = Color3.new(1, 1, 1),
 			ImageTransparency = 0
 		})
 		return
 	end
 
+	local target = active and Color3.fromRGB(255, 170, 42) or (hover and color.Dark(uipallet.Text, 0.16) or color.Light(uipallet.Main, 0.37))
 	tween:Tween(star, TweenInfo.new(0.16, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
 		TextColor3 = target
 	})
@@ -5951,13 +5964,25 @@ function mainapi:CreateCategoryList(categorysettings)
 end
 
 function mainapi:CreateSearch()
+	local xoffset = inputService.TouchEnabled and 0.3 or 0.5
 	local searchbkg = Instance.new('Frame')
 	searchbkg.Name = 'Search'
-	searchbkg.Size = UDim2.fromOffset(220, 37)
-	searchbkg.Position = UDim2.new(0.5, 0, 0, 13)
-	searchbkg.AnchorPoint = Vector2.new(0.5, 0)
+	searchbkg.Size = UDim2.fromOffset(240, 37)
+	searchbkg.Position = UDim2.new(xoffset, 0, 0, 13)
+	searchbkg.AnchorPoint = Vector2.new(xoffset, 0)
 	searchbkg.BackgroundColor3 = color.Dark(uipallet.Main, 0.02)
 	searchbkg.Parent = clickgui
+	local searchlegit = Instance.new('TextLabel')
+	searchlegit.Size = UDim2.new(0.7, 1, 0, 37)
+	searchlegit.Position = UDim2.new(0.5, 4, 0, -1)
+	searchlegit.BackgroundTransparency = 1
+	searchlegit.FontFace = uipallet.Font
+	searchlegit.Text = 'Legit'
+	searchlegit.AnchorPoint = Vector2.new(0.5, 0)
+	searchlegit.TextSize = 14
+	searchlegit.Parent = searchbkg
+	searchlegit.TextXAlignment = Enum.TextXAlignment.Left
+	searchlegit.TextColor3 = Color3.new(1, 1, 1)
 	local searchicon = Instance.new('ImageLabel')
 	searchicon.Name = 'Icon'
 	searchicon.Size = UDim2.fromOffset(14, 14)
@@ -5968,21 +5993,21 @@ function mainapi:CreateSearch()
 	searchicon.Parent = searchbkg
 	local legiticon = Instance.new('ImageButton')
 	legiticon.Name = 'Legit'
-	legiticon.Size = UDim2.fromOffset(16, 16)
-	legiticon.Position = UDim2.fromOffset(13, 11)
+	legiticon.Size = UDim2.fromOffset(29, 16)
+	legiticon.Position = UDim2.fromOffset(8, 11)
 	legiticon.BackgroundTransparency = 1
-	legiticon.Image = getcustomasset('newvape/assets/new/legittab.png')
-	legiticon.ImageColor3 = color.Light(uipallet.Main, 0.37)
+	legiticon.Image = getcustomasset('newvape/assets/new/legit.png')
 	legiticon.Parent = searchbkg
 	local legitdivider = Instance.new('Frame')
 	legitdivider.Name = 'LegitDivider'
 	legitdivider.Size = UDim2.fromOffset(2, 12)
-	legitdivider.Position = UDim2.fromOffset(39, 13)
+	legitdivider.Position = UDim2.fromOffset(76, 13)
 	legitdivider.BackgroundColor3 = color.Light(uipallet.Main, 0.14)
 	legitdivider.BorderSizePixel = 0
 	legitdivider.Parent = searchbkg
 	addBlur(searchbkg)
 	addCorner(searchbkg)
+	warn('what?')
 	local search = Instance.new('TextBox')
 	search.BackgroundTransparency = 1
 	search.Text = ''
@@ -5991,10 +6016,12 @@ function mainapi:CreateSearch()
 	search.TextColor3 = uipallet.Text
 	search.TextSize = 12
 	search.FontFace = uipallet.Font
-	search.Size = UDim2.new(1, -46, 0, 37)
-	search.Position = UDim2.fromOffset(46, 0)
 	search.ClearTextOnFocus = false
 	search.Parent = searchbkg
+	task.delay(1, function()
+		search.Size = UDim2.new(1, -100, 0, 37)
+		search.Position = UDim2.fromOffset(85, 0)
+	end)
 	local children = Instance.new('ScrollingFrame')
 	children.Name = 'Children'
 	children.Size = UDim2.new(1, 0, 1, -37)
@@ -6041,6 +6068,8 @@ function mainapi:CreateSearch()
 				v:Destroy()
 			end
 		end
+		search.Size = UDim2.new(1, -100, 0, 37)
+		search.Position = UDim2.fromOffset(85, 0)
 		if search.Text == '' then return end
 
 		for i, v in self.Modules do
@@ -6052,7 +6081,7 @@ function mainapi:CreateSearch()
 						v.Visible = false
 					end
 				end
-				button.Size = UDim2.fromOffset(220, 40)
+				button.Size = UDim2.fromOffset(240, 40)
 				button.Bind:Destroy()
 				button.Indicators.MATCHED.Visible = hasAlias
 				button.MouseButton1Click:Connect(function()
@@ -6110,7 +6139,7 @@ function mainapi:CreateSearch()
 			setthreadidentity(8)
 		end
 		children.CanvasSize = UDim2.fromOffset(0, windowlist.AbsoluteContentSize.Y / scale.Scale)
-		searchbkg.Size = UDim2.fromOffset(220, math.min(37 + windowlist.AbsoluteContentSize.Y / scale.Scale, 437))
+		searchbkg.Size = UDim2.fromOffset(240, math.min(37 + windowlist.AbsoluteContentSize.Y / scale.Scale, 437))
 	end)
 
 	self.Legit.Icon = legiticon
@@ -6272,7 +6301,6 @@ function mainapi:CreateLegit()
 		if modulesettings.Size then
 			local modulechildren = Instance.new('Frame')
 			modulechildren.Size = modulesettings.Size
-			modulechildren.Position = modulesettings.Position or UDim2.new(0.5, -math.floor(modulesettings.Size.X.Offset / 2), 0.5, -math.floor(modulesettings.Size.Y.Offset / 2))
 			modulechildren.BackgroundTransparency = 1
 			modulechildren.Visible = false
 			modulechildren.Parent = scaledgui
@@ -6501,7 +6529,7 @@ function mainapi:CreateProfileGUI()
 	div.Position = UDim2.new(0, 0, 0.102827765, 0)
 	div.Size = UDim2.new(1, 0, 0, 1)
 
-	local profiletitle = Instance.new('TextLabel') 
+	local profiletitle = Instance.new('TextLabel') -- w gui 2 lua (lowk lazy so aint doing all the work)
 	profiletitle.Parent = icon
 	profiletitle.BackgroundTransparency = 1
 	profiletitle.Position = UDim2.new(0, 25, 0, 0)
@@ -6529,8 +6557,9 @@ function mainapi:CreateProfileGUI()
 
 	addCorner(profilemaker)
 
-	
-
+	--[[
+		Sorts
+	]]
 
 	local sortframe = Instance.new("Frame")
 	sortframe.Parent = window
@@ -6559,8 +6588,9 @@ function mainapi:CreateProfileGUI()
 	local sortfunc = 'newest'
 
 
-	
-
+	--[[
+		Popup
+	]]
 
 	local popup: Frame = Instance.new('Frame', window)
 	popup.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -6725,8 +6755,9 @@ function mainapi:CreateProfileGUI()
 	ImageLabel.BorderSizePixel = 0;
 	ImageLabel.BackgroundColor3 = Color3.fromRGB(255, 255, 255);
 
-	
-
+	--[[
+		Search
+	]]
 
 	local psearchbar = Instance.new("Frame")
 	psearchbar.Name = "Search"
@@ -6781,8 +6812,9 @@ function mainapi:CreateProfileGUI()
 		end
 	end)
 
-	
-
+	--[[
+		confirmation
+	]]
 
 	local uploadconfirmationn: Frame = Instance.new('Frame', window);
 	uploadconfirmationn.AnchorPoint = Vector2.new(0.5, 0.5);
@@ -6885,8 +6917,9 @@ function mainapi:CreateProfileGUI()
 	configdbox.TextSize = 14;
 	configdbox.BackgroundColor3 = Color3.fromRGB(255, 255, 255);
 
-	
-
+	--[[
+		select config
+	]]
 
 	local configdatas: Frame = Instance.new('Frame', profilemaker);
 	configdatas.Name = 'configdatas';
@@ -6922,8 +6955,9 @@ function mainapi:CreateProfileGUI()
 
 	addCorner(configstorage)
 
-	
-
+	--[[
+		children
+	]]
 
 	local children = Instance.new("ScrollingFrame")
 	children.Parent = window
@@ -7255,7 +7289,7 @@ function mainapi:CreateProfileGUI()
 			end
 			fr = false
 		end
-		
+		--visibleCheck()
 	end)
 	gridlayout:GetPropertyChangedSignal('AbsoluteContentSize'):Connect(function()
 		if self.ThreadFix then
@@ -7708,7 +7742,7 @@ gui.ZIndexBehavior = Enum.ZIndexBehavior.Global
 gui.IgnoreGuiInset = true
 gui.OnTopOfCoreBlur = true
 if false then
-	gui.Parent = cloneref(game:GetService('CoreGui'))
+	gui.Parent = cloneref(game:GetService('CoreGui'))--(gethui and gethui()) or cloneref(game:GetService('CoreGui'))
 else
 	gui.Parent = lplr.PlayerGui
 	gui.ResetOnSpawn = false
@@ -7880,7 +7914,9 @@ mainapi:CreateCategory({
 })
 mainapi.Categories.Main:CreateDivider('misc')
 
-
+--[[
+	Friends
+]]
 local friends
 local friendscolor = {
 	Hue = 1,
@@ -7937,7 +7973,9 @@ friends:CreateToggle({
 mainapi:Clean(friends.Update)
 mainapi:Clean(friends.ColorUpdate)
 
-
+--[[
+	Profiles
+]]
 local Profiles = mainapi:CreateCategoryList({
 	Name = 'Profiles',
 	Icon = getcustomasset('newvape/assets/new/profilesicon.png'),
@@ -7977,7 +8015,9 @@ Profiles:CreateButton({
 	end
 })
 
-
+--[[
+	Targets
+]]
 local targets
 targets = mainapi:CreateCategoryList({
 	Name = 'Targets',
@@ -7998,6 +8038,9 @@ mainapi.Categories.Main:CreateFavoritesBar()
 mainapi.Categories.Main:CreateOverlayBar()
 mainapi.Categories.Main:CreateSettingsDivider()
 
+--[[
+	General Settings
+]]
 
 local general = mainapi.Categories.Main:CreateSettingsPane({Name = 'General'})
 mainapi.MultiKeybind = general:CreateToggle({
@@ -8045,6 +8088,9 @@ general:CreateButton({
 	Tooltip = 'Reloads vape for debugging purposes'
 })
 
+--[[
+	Module Settings
+]]
 
 local modules = mainapi.Categories.Main:CreateSettingsPane({Name = 'Modules'})
 modules:CreateToggle({
@@ -8068,6 +8114,9 @@ modules:CreateToggle({
 	end
 })
 
+--[[
+	GUI Settings
+]]
 
 guipane = mainapi.Categories.Main:CreateSettingsPane({Name = 'GUI'})
 mainapi.Blur = guipane:CreateToggle({
@@ -8217,6 +8266,9 @@ guipane:CreateButton({
 	Tooltip = 'Sorts GUI'
 })
 
+--[[
+	Notification Settings
+]]
 
 local notifpane = mainapi.Categories.Main:CreateSettingsPane({Name = 'Notifications'})
 mainapi.Notifications = notifpane:CreateToggle({
@@ -8244,6 +8296,9 @@ mainapi.GUIColor = mainapi.Categories.Main:CreateGUISlider({
 })
 mainapi.Categories.Main:CreateBind()
 
+--[[
+	Text GUI
+]]
 
 local textgui = mainapi:CreateOverlay({
 	Name = 'Text GUI',
@@ -8446,6 +8501,9 @@ textguicolorcustom = textgui:CreateColorSlider({
 	Visible = false
 })
 
+--[[
+	Text GUI Objects
+]]
 
 local VapeLabels = {}
 local VapeLogo = Instance.new('ImageLabel')
@@ -8539,6 +8597,9 @@ VapeLabelSorter.VerticalAlignment = Enum.VerticalAlignment.Top
 VapeLabelSorter.SortOrder = Enum.SortOrder.LayoutOrder
 VapeLabelSorter.Parent = VapeLabelHolder
 
+--[[
+	Target Info
+]]
 
 local targetinfo
 local targetinfoobj
