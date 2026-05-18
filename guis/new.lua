@@ -4206,19 +4206,18 @@ function mainapi:CreateCategory(categorysettings)
 		dots.Image = getcustomasset('newvape/assets/new/dots.png')
 		dots.ImageColor3 = color.Light(uipallet.Main, 0.37)
 		dots.Parent = dotsbutton
-		local favoritebutton = Instance.new('ImageButton')
+		local favoritebutton = Instance.new('TextButton')
 		favoritebutton.Name = 'Favorite'
-		favoritebutton.Size = UDim2.fromOffset(21, 21)
-		favoritebutton.Position = UDim2.new(1, -61, 0, 9)
+		favoritebutton.Size = UDim2.fromOffset(22, 22)
+		favoritebutton.Position = UDim2.new(1, -61, 0, 8)
 		favoritebutton.AnchorPoint = Vector2.new(1, 0)
 		favoritebutton.BackgroundTransparency = 1
 		favoritebutton.AutoButtonColor = false
 		favoritebutton.Visible = false
-		favoritebutton.Image = getcustomasset('newvape/assets/new/favoriteoff.png')
-		favoritebutton.ImageColor3 = color.Light(uipallet.Main, 0.37)
-		favoritebutton.ImageTransparency = 0
-		favoritebutton.ScaleType = Enum.ScaleType.Fit
-		favoritebutton:SetAttribute('StaticFavoriteStar', true)
+		favoritebutton.Text = '★'
+		favoritebutton.TextSize = 22
+		favoritebutton.FontFace = uipallet.FontSemiBold
+		favoritebutton.TextColor3 = color.Light(uipallet.Main, 0.37)
 		favoritebutton.Parent = modulebutton
 		addTooltip(favoritebutton, 'Add to favorites')
 
