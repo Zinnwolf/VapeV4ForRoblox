@@ -4877,7 +4877,7 @@ function mainapi:GetFavoriteStarAsset(active)
 end
 
 function mainapi:GetFavoriteActiveColor()
-	return Color3.fromRGB(255, 206, 76)
+	return Color3.fromRGB(255, 170, 42)
 end
 
 function mainapi:AnimateStarColor(star, active, hover)
