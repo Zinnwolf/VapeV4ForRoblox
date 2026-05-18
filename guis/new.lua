@@ -4206,18 +4206,18 @@ function mainapi:CreateCategory(categorysettings)
 		dots.Image = getcustomasset('newvape/assets/new/dots.png')
 		dots.ImageColor3 = color.Light(uipallet.Main, 0.37)
 		dots.Parent = dotsbutton
-		local favoritebutton = Instance.new('TextButton')
+		local favoritebutton = Instance.new('ImageButton')
 		favoritebutton.Name = 'Favorite'
-		favoritebutton.Size = UDim2.fromOffset(22, 22)
-		favoritebutton.Position = UDim2.new(1, -61, 0, 8)
+		favoritebutton.Size = UDim2.fromOffset(21, 21)
+		favoritebutton.Position = UDim2.new(1, -61, 0, 9)
 		favoritebutton.AnchorPoint = Vector2.new(1, 0)
 		favoritebutton.BackgroundTransparency = 1
 		favoritebutton.AutoButtonColor = false
 		favoritebutton.Visible = false
-		favoritebutton.Text = '★'
-		favoritebutton.TextSize = 22
-		favoritebutton.FontFace = uipallet.FontSemiBold
-		favoritebutton.TextColor3 = color.Light(uipallet.Main, 0.37)
+		favoritebutton.Image = getcustomasset('newvape/assets/new/favoriteoff.png')
+		favoritebutton.ImageColor3 = color.Light(uipallet.Main, 0.37)
+		favoritebutton.ImageTransparency = 0
+		favoritebutton.ScaleType = Enum.ScaleType.Fit
 		favoritebutton.Parent = modulebutton
 		addTooltip(favoritebutton, 'Add to favorites')
 
@@ -4338,11 +4338,24 @@ function mainapi:CreateCategory(categorysettings)
 			favoritebutton.Visible = (not (mainapi.Hidden and mainapi.Hidden.Editing)) and modulechildren.Visible
 		end
 
-		local function setModuleChildrenVisible(state)
+		local function setModuleChildrenVisible(state, customParent, customLayoutOrder)
 			if mainapi.Hidden and mainapi.Hidden.Editing then
 				modulechildren.Visible = false
+				if modulechildren.Parent ~= children then
+					modulechildren.Parent = children
+					modulechildren.LayoutOrder = modulebutton.LayoutOrder + 1
+				end
 				return
 			end
+
+			if state then
+				modulechildren.Parent = customParent or children
+				modulechildren.LayoutOrder = customLayoutOrder or (modulebutton.LayoutOrder + 1)
+			elseif modulechildren.Parent ~= children then
+				modulechildren.Parent = children
+				modulechildren.LayoutOrder = modulebutton.LayoutOrder + 1
+			end
+
 			modulechildren.Visible = state
 			if state then
 				modulechildren.BackgroundTransparency = 1
@@ -4350,6 +4363,7 @@ function mainapi:CreateCategory(categorysettings)
 			end
 			bind.Visible = #moduleapi.Bind > 0 or hovered or modulechildren.Visible
 			updateFavoriteVisibility()
+			mainapi:UpdateFavoriteRow(moduleapi.Name)
 			mainapi:QueueSave(0.4)
 		end
 		moduleapi.SetChildrenVisible = setModuleChildrenVisible
@@ -4731,12 +4745,17 @@ function mainapi:GetFavoriteStarAsset(active)
 	return getcustomasset('newvape/assets/new/favoriteoff.png')
 end
 
+function mainapi:GetFavoriteActiveColor()
+	return Color3.fromRGB(255, 206, 76)
+end
+
 function mainapi:AnimateStarColor(star, active, hover)
 	if not star then return end
 
-	local target = active and Color3.new(1, 1, 1) or (hover and color.Dark(uipallet.Text, 0.16) or color.Light(uipallet.Main, 0.37))
+	local imageStar = star:IsA('ImageButton') or star:IsA('ImageLabel')
+	local target = active and (imageStar and Color3.new(1, 1, 1) or self:GetFavoriteActiveColor()) or (hover and color.Dark(uipallet.Text, 0.16) or color.Light(uipallet.Main, 0.37))
 
-	if star:IsA('ImageButton') or star:IsA('ImageLabel') then
+	if imageStar then
 		star.Image = self:GetFavoriteStarAsset(active)
 		tween:Tween(star, TweenInfo.new(0.16, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
 			ImageColor3 = target,
@@ -4832,9 +4851,48 @@ function mainapi:UpdateFavoriteRow(name)
 		end
 	end
 	row.Dots.Visible = not editingHidden
-	row.BindPreview.Visible = (not editingHidden) and row.BindPreview.Visible
-	row.TextColor3 = moduleapi.Enabled and uipallet.Text or color.Dark(uipallet.Text, 0.16)
-	row.BackgroundColor3 = moduleapi.Enabled and color.Light(uipallet.Main, 0.02) or uipallet.Main
+	if editingHidden then
+		row.BindPreview.Visible = false
+	end
+
+	local gradient = row:FindFirstChildWhichIsA('UIGradient')
+	local dots = row.Dots and row.Dots:FindFirstChild('Dots')
+	local bind = row:FindFirstChild('BindPreview')
+	local bindicon = bind and bind:FindFirstChild('Icon')
+	local bindtext = bind and bind:FindFirstChild('Text')
+
+	if moduleapi.Enabled then
+		local rainbow = self.GUIColor.Rainbow and self.RainbowMode.Value ~= 'Retro'
+		local background = rainbow and Color3.fromHSV(self:Color((self.GUIColor.Hue - (moduleapi.Index * 0.025)) % 1)) or Color3.fromHSV(self.GUIColor.Hue, self.GUIColor.Sat, self.GUIColor.Value)
+		local textColor = self.GUIColor.Rainbow and Color3.new(0.19, 0.19, 0.19) or self:TextColor(self.GUIColor.Hue, self.GUIColor.Sat, self.GUIColor.Value)
+
+		row.TextColor3 = textColor
+		if gradient then
+			gradient.Enabled = rainbow and self.RainbowMode.Value == 'Gradient'
+			if gradient.Enabled then
+				row.BackgroundColor3 = Color3.new(1, 1, 1)
+				gradient.Color = ColorSequence.new({
+					ColorSequenceKeypoint.new(0, Color3.fromHSV(self:Color((self.GUIColor.Hue - (moduleapi.Index * 0.025)) % 1))),
+					ColorSequenceKeypoint.new(1, Color3.fromHSV(self:Color((self.GUIColor.Hue - ((moduleapi.Index + 1) * 0.025)) % 1)))
+				})
+			else
+				row.BackgroundColor3 = background
+			end
+		else
+			row.BackgroundColor3 = background
+		end
+
+		if dots then dots.ImageColor3 = textColor end
+		if bindicon then bindicon.ImageColor3 = textColor end
+		if bindtext then bindtext.TextColor3 = textColor end
+	else
+		if gradient then gradient.Enabled = false end
+		row.TextColor3 = color.Dark(uipallet.Text, 0.16)
+		row.BackgroundColor3 = uipallet.Main
+		if dots then dots.ImageColor3 = color.Light(uipallet.Main, 0.37) end
+		if bindicon then bindicon.ImageColor3 = color.Dark(uipallet.Text, 0.43) end
+		if bindtext then bindtext.TextColor3 = color.Dark(uipallet.Text, 0.43) end
+	end
 end
 
 function mainapi:CreateFavoriteRow(moduleapi)
@@ -4855,6 +4913,10 @@ function mainapi:CreateFavoriteRow(moduleapi)
 	row.TextSize = 14
 	row.FontFace = uipallet.Font
 	row.Parent = fav.Children
+	local gradient = Instance.new('UIGradient')
+	gradient.Rotation = 90
+	gradient.Enabled = false
+	gradient.Parent = row
 
 	local hiddenbox = Instance.new('TextButton')
 	hiddenbox.Name = 'HiddenBox'
@@ -5011,21 +5073,17 @@ function mainapi:CreateFavoriteRow(moduleapi)
 		self:UpdateFavoriteRow(moduleapi.Name)
 	end)
 
-	row.MouseButton2Click:Connect(function()
+	local function toggleFavoriteSettings()
 		if self.Hidden and self.Hidden.Editing then return end
 		if moduleapi.SetChildrenVisible then
-			moduleapi:SetChildrenVisible(not moduleapi.Children.Visible)
+			local open = not (moduleapi.Children and moduleapi.Children.Visible and moduleapi.Children.Parent == fav.Children)
+			moduleapi:SetChildrenVisible(open, fav.Children, row.LayoutOrder + 1)
 		end
 		updateBindPreview()
-	end)
+	end
 
-	dotsbutton.MouseButton1Click:Connect(function()
-		if self.Hidden and self.Hidden.Editing then return end
-		if moduleapi.SetChildrenVisible then
-			moduleapi:SetChildrenVisible(not moduleapi.Children.Visible)
-		end
-		updateBindPreview()
-	end)
+	row.MouseButton2Click:Connect(toggleFavoriteSettings)
+	dotsbutton.MouseButton1Click:Connect(toggleFavoriteSettings)
 
 	bind.MouseEnter:Connect(function()
 		bindtext.Visible = false
@@ -5068,6 +5126,7 @@ function mainapi:CreateFavoriteRow(moduleapi)
 	end)
 
 	self.Favorites.Rows[moduleapi.Name] = row
+	moduleapi.FavoriteRow = row
 	updateBindPreview()
 	self:UpdateFavoriteRow(moduleapi.Name)
 end
@@ -5084,12 +5143,16 @@ function mainapi:RefreshFavorites()
 	end
 
 	table.sort(self.Favorites.List)
+	local fav = self.Categories and self.Categories.Favorites
 	for order, name in self.Favorites.List do
 		local moduleapi = self.Modules[name]
 		if moduleapi then
 			self:CreateFavoriteRow(moduleapi)
 			if self.Favorites.Rows[name] then
-				self.Favorites.Rows[name].LayoutOrder = order
+				self.Favorites.Rows[name].LayoutOrder = order * 2
+				if fav and moduleapi.Children and moduleapi.Children.Parent == fav.Children then
+					moduleapi.Children.LayoutOrder = order * 2 + 1
+				end
 			end
 		end
 	end
@@ -9066,6 +9129,12 @@ function mainapi:UpdateGUI(hue, sat, val, default)
 		end
 		if button.UpdatePinVisual then
 			button:UpdatePinVisual()
+		end
+		if button.UpdateFavoriteVisual then
+			button:UpdateFavoriteVisual()
+		end
+		if mainapi.Favorites and mainapi.Favorites.Rows and mainapi.Favorites.Rows[button.Name] then
+			mainapi:UpdateFavoriteRow(button.Name)
 		end
 
 		for _, option in button.Options do
