@@ -4218,6 +4218,7 @@ function mainapi:CreateCategory(categorysettings)
 		favoritebutton.ImageColor3 = color.Light(uipallet.Main, 0.37)
 		favoritebutton.ImageTransparency = 0
 		favoritebutton.ScaleType = Enum.ScaleType.Fit
+		favoritebutton:SetAttribute('StaticFavoriteStar', true)
 		favoritebutton.Parent = modulebutton
 		addTooltip(favoritebutton, 'Add to favorites')
 
@@ -4259,6 +4260,18 @@ function mainapi:CreateCategory(categorysettings)
 		windowlist.SortOrder = Enum.SortOrder.LayoutOrder
 		windowlist.HorizontalAlignment = Enum.HorizontalAlignment.Center
 		windowlist.Parent = modulechildren
+		local favoritechildren = Instance.new('Frame')
+		favoritechildren.Name = modulesettings.Name..'FavoriteChildren'
+		favoritechildren.Size = UDim2.new(1, 0, 0, 0)
+		favoritechildren.BackgroundColor3 = color.Dark(uipallet.Main, 0.02)
+		favoritechildren.BorderSizePixel = 0
+		favoritechildren.Visible = false
+		moduleapi.FavoriteChildren = favoritechildren
+		moduleapi.FavoriteOptions = {}
+		local favoritewindowlist = Instance.new('UIListLayout')
+		favoritewindowlist.SortOrder = Enum.SortOrder.LayoutOrder
+		favoritewindowlist.HorizontalAlignment = Enum.HorizontalAlignment.Center
+		favoritewindowlist.Parent = favoritechildren
 		local divider = Instance.new('Frame')
 		divider.Name = 'Divider'
 		divider.Size = UDim2.new(1, 0, 0, 1)
@@ -4315,6 +4328,7 @@ function mainapi:CreateCategory(categorysettings)
 			modulebutton.Visible = editing or not hidden
 			if hidden and not editing then
 				modulechildren.Visible = false
+				favoritechildren.Visible = false
 				bind.Visible = false
 				favoritebutton.Visible = false
 			end
@@ -4338,24 +4352,54 @@ function mainapi:CreateCategory(categorysettings)
 			favoritebutton.Visible = (not (mainapi.Hidden and mainapi.Hidden.Editing)) and modulechildren.Visible
 		end
 
-		local function setModuleChildrenVisible(state, customParent, customLayoutOrder)
+		local function syncOptionState(target, source)
+			if not target or not source or target == source then return end
+			moduleapi.SyncingFavoriteOption = true
+			local suc, err = pcall(function()
+				if source.Type == 'Slider' then
+					target:SetValue(source.Value, nil, true)
+				elseif source.Type == 'Dropdown' then
+					target:SetValue(source.Value)
+				elseif source.Type == 'Toggle' then
+					if target.Enabled ~= source.Enabled then
+						target:Toggle()
+					end
+				elseif source.Type == 'TextBox' then
+					target:SetValue(source.Value)
+				elseif source.Type == 'ColorSlider' then
+					if target.Rainbow ~= source.Rainbow then
+						target:Toggle()
+					end
+					target:SetValue(source.Hue, source.Sat, source.Value, source.Opacity)
+				elseif source.Type == 'TwoSlider' then
+					target:SetValue(false, source.ValueMin)
+					target:SetValue(true, source.ValueMax)
+				elseif source.Type == 'TextList' then
+					target.List = table.clone(source.List or {})
+					target.ListEnabled = table.clone(source.ListEnabled or {})
+					target:ChangeValue()
+				elseif source.Type == 'Targets' then
+					for _, key in {'Players', 'NPCs', 'Invisible', 'Walls'} do
+						if target[key] and source[key] and target[key].Enabled ~= source[key].Enabled then
+							target[key]:Toggle()
+						end
+					end
+				end
+			end)
+			moduleapi.SyncingFavoriteOption = false
+			if not suc and ((shared and shared.VapeDeveloper) or getgenv().VapeDeveloper) then
+				warn(err)
+			end
+		end
+
+		local function setModuleChildrenVisible(state)
 			if mainapi.Hidden and mainapi.Hidden.Editing then
 				modulechildren.Visible = false
-				if modulechildren.Parent ~= children then
-					modulechildren.Parent = children
-					modulechildren.LayoutOrder = modulebutton.LayoutOrder + 1
-				end
 				return
 			end
 
-			if state then
-				modulechildren.Parent = customParent or children
-				modulechildren.LayoutOrder = customLayoutOrder or (modulebutton.LayoutOrder + 1)
-			elseif modulechildren.Parent ~= children then
-				modulechildren.Parent = children
-				modulechildren.LayoutOrder = modulebutton.LayoutOrder + 1
-			end
-
+			modulechildren.Parent = children
+			modulechildren.LayoutOrder = modulebutton.LayoutOrder + 1
 			modulechildren.Visible = state
 			if state then
 				modulechildren.BackgroundTransparency = 1
@@ -4367,6 +4411,26 @@ function mainapi:CreateCategory(categorysettings)
 			mainapi:QueueSave(0.4)
 		end
 		moduleapi.SetChildrenVisible = setModuleChildrenVisible
+
+		local function setFavoriteChildrenVisible(state, customParent, customLayoutOrder)
+			if mainapi.Hidden and mainapi.Hidden.Editing then
+				favoritechildren.Visible = false
+				return
+			end
+
+			local fav = mainapi.Categories and mainapi.Categories.Favorites
+			favoritechildren.Parent = customParent or (fav and fav.Children) or favoritechildren.Parent
+			favoritechildren.LayoutOrder = customLayoutOrder or favoritechildren.LayoutOrder
+			favoritechildren.Visible = state
+			if state then
+				favoritechildren.BackgroundTransparency = 1
+				tween:Tween(favoritechildren, TweenInfo.new(0.14, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundTransparency = 0})
+			end
+			mainapi:UpdateFavoriteRow(moduleapi.Name)
+			mainapi:QueueSave(0.4)
+		end
+		moduleapi.SetFavoriteChildrenVisible = setFavoriteChildrenVisible
+
 
 		function moduleapi:SetBind(tab, mouse)
 			if tab.Mobile then
@@ -4429,9 +4493,71 @@ function mainapi:CreateCategory(categorysettings)
 			task.spawn(modulesettings.Function, self.Enabled)
 		end
 
+		local function cloneSettings(optionsettings)
+			local cloned = {}
+			for key, value in optionsettings do
+				cloned[key] = value
+			end
+			return cloned
+		end
+
 		for i, v in components do
 			moduleapi['Create'..i] = function(_, optionsettings)
-				return v(optionsettings, modulechildren, moduleapi)
+				local settings = type(optionsettings) == 'table' and optionsettings or {}
+				local optionName = settings.Name
+				local realFunction = settings.Function or function() end
+				local mainSettings = cloneSettings(settings)
+				mainSettings.Function = function(...)
+					if moduleapi.SyncingFavoriteOption then return end
+					local mainOption = optionName and moduleapi.Options[optionName]
+					local favoriteOption = optionName and moduleapi.FavoriteOptions and moduleapi.FavoriteOptions[optionName]
+					if mainOption and favoriteOption then
+						syncOptionState(favoriteOption, mainOption)
+					end
+					return realFunction(...)
+				end
+
+				local mainOption = v(mainSettings, modulechildren, moduleapi)
+				if optionName and mainOption then
+					local favoriteSettings = cloneSettings(settings)
+					favoriteSettings.Function = function(...)
+						if moduleapi.SyncingFavoriteOption then return end
+						local sourceOption = moduleapi.FavoriteOptions and moduleapi.FavoriteOptions[optionName]
+						local targetOption = moduleapi.Options and moduleapi.Options[optionName]
+						if sourceOption and targetOption then
+							syncOptionState(targetOption, sourceOption)
+						end
+						return realFunction(...)
+					end
+
+					local favoriteProxy = {
+						Options = moduleapi.FavoriteOptions,
+						Legit = moduleapi.Legit
+					}
+					moduleapi.SyncingFavoriteOption = true
+					local favoriteOption = v(favoriteSettings, favoritechildren, favoriteProxy)
+					moduleapi.SyncingFavoriteOption = false
+					if favoriteOption then
+						moduleapi.FavoriteOptions[optionName] = favoriteOption
+						syncOptionState(favoriteOption, mainOption)
+						if mainOption.Object and favoriteOption.Object then
+							favoriteOption.Object.Visible = mainOption.Object.Visible
+							mainOption.Object:GetPropertyChangedSignal('Visible'):Connect(function()
+								favoriteOption.Object.Visible = mainOption.Object.Visible
+							end)
+						end
+					end
+				elseif optionName and i == 'Button' then
+					local favoriteSettings = cloneSettings(settings)
+					favoriteSettings.Function = realFunction
+					local favoriteProxy = {
+						Options = moduleapi.FavoriteOptions,
+						Legit = moduleapi.Legit
+					}
+					v(favoriteSettings, favoritechildren, favoriteProxy)
+				end
+
+				return mainOption
 			end
 		end
 
@@ -4587,6 +4713,12 @@ function mainapi:CreateCategory(categorysettings)
 				setthreadidentity(8)
 			end
 			modulechildren.Size = UDim2.new(1, 0, 0, windowlist.AbsoluteContentSize.Y / scale.Scale)
+		end)
+		favoritewindowlist:GetPropertyChangedSignal('AbsoluteContentSize'):Connect(function()
+			if mainapi.ThreadFix then
+				setthreadidentity(8)
+			end
+			favoritechildren.Size = UDim2.new(1, 0, 0, favoritewindowlist.AbsoluteContentSize.Y / scale.Scale)
 		end)
 
 		moduleapi.Object = modulebutton
@@ -4753,10 +4885,13 @@ function mainapi:AnimateStarColor(star, active, hover)
 	if not star then return end
 
 	local imageStar = star:IsA('ImageButton') or star:IsA('ImageLabel')
-	local target = active and (imageStar and Color3.new(1, 1, 1) or self:GetFavoriteActiveColor()) or (hover and color.Dark(uipallet.Text, 0.16) or color.Light(uipallet.Main, 0.37))
+	local staticImageStar = imageStar and star:GetAttribute('StaticFavoriteStar')
+	local target = active and (staticImageStar and self:GetFavoriteActiveColor() or (imageStar and Color3.new(1, 1, 1) or self:GetFavoriteActiveColor())) or (hover and color.Dark(uipallet.Text, 0.16) or color.Light(uipallet.Main, 0.37))
 
 	if imageStar then
-		star.Image = self:GetFavoriteStarAsset(active)
+		if not staticImageStar then
+			star.Image = self:GetFavoriteStarAsset(active)
+		end
 		tween:Tween(star, TweenInfo.new(0.16, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
 			ImageColor3 = target,
 			ImageTransparency = 0
@@ -5027,7 +5162,7 @@ function mainapi:CreateFavoriteRow(moduleapi)
 
 		local bindValue = moduleapi.Bind or {}
 		local hasBind = type(bindValue) == 'table' and #bindValue > 0
-		bind.Visible = rowHovered or hasBind or (moduleapi.Children and moduleapi.Children.Visible)
+		bind.Visible = rowHovered or hasBind or (moduleapi.FavoriteChildren and moduleapi.FavoriteChildren.Visible)
 
 		if hasBind then
 			bindtext.Visible = true
@@ -5075,9 +5210,9 @@ function mainapi:CreateFavoriteRow(moduleapi)
 
 	local function toggleFavoriteSettings()
 		if self.Hidden and self.Hidden.Editing then return end
-		if moduleapi.SetChildrenVisible then
-			local open = not (moduleapi.Children and moduleapi.Children.Visible and moduleapi.Children.Parent == fav.Children)
-			moduleapi:SetChildrenVisible(open, fav.Children, row.LayoutOrder + 1)
+		if moduleapi.SetFavoriteChildrenVisible then
+			local open = not (moduleapi.FavoriteChildren and moduleapi.FavoriteChildren.Visible)
+			moduleapi:SetFavoriteChildrenVisible(open, fav.Children, row.LayoutOrder + 1)
 		end
 		updateBindPreview()
 	end
@@ -5137,6 +5272,11 @@ function mainapi:RefreshFavorites()
 
 	for name, row in self.Favorites.Rows do
 		if not table.find(self.Favorites.List, name) or not self.Modules[name] then
+			local moduleapi = self.Modules[name]
+			if moduleapi and moduleapi.FavoriteChildren then
+				moduleapi.FavoriteChildren.Visible = false
+				moduleapi.FavoriteChildren.Parent = nil
+			end
 			row:Destroy()
 			self.Favorites.Rows[name] = nil
 		end
@@ -5150,8 +5290,8 @@ function mainapi:RefreshFavorites()
 			self:CreateFavoriteRow(moduleapi)
 			if self.Favorites.Rows[name] then
 				self.Favorites.Rows[name].LayoutOrder = order * 2
-				if fav and moduleapi.Children and moduleapi.Children.Parent == fav.Children then
-					moduleapi.Children.LayoutOrder = order * 2 + 1
+				if fav and moduleapi.FavoriteChildren and moduleapi.FavoriteChildren.Parent == fav.Children then
+					moduleapi.FavoriteChildren.LayoutOrder = order * 2 + 1
 				end
 			end
 		end
@@ -5173,6 +5313,10 @@ function mainapi:SetFavorite(name, state, skipSave)
 	local moduleapi = self.Modules[name]
 	if moduleapi then
 		moduleapi.Favorited = table.find(self.Favorites.List, name) ~= nil
+		if not moduleapi.Favorited and moduleapi.FavoriteChildren then
+			moduleapi.FavoriteChildren.Visible = false
+			moduleapi.FavoriteChildren.Parent = nil
+		end
 		if moduleapi.UpdateFavoriteVisual then
 			moduleapi:UpdateFavoriteVisual()
 		end
@@ -5256,6 +5400,11 @@ function mainapi:SetHiddenEditing(state)
 				moduleapi:SetChildrenVisible(false)
 			elseif moduleapi.Children then
 				moduleapi.Children.Visible = false
+			end
+			if moduleapi.SetFavoriteChildrenVisible then
+				moduleapi:SetFavoriteChildrenVisible(false)
+			elseif moduleapi.FavoriteChildren then
+				moduleapi.FavoriteChildren.Visible = false
 			end
 		end
 	end
