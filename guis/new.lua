@@ -5973,25 +5973,13 @@ function mainapi:CreateCategoryList(categorysettings)
 end
 
 function mainapi:CreateSearch()
-	local xoffset = inputService.TouchEnabled and 0.3 or 0.5
 	local searchbkg = Instance.new('Frame')
 	searchbkg.Name = 'Search'
-	searchbkg.Size = UDim2.fromOffset(240, 37)
-	searchbkg.Position = UDim2.new(xoffset, 0, 0, 13)
-	searchbkg.AnchorPoint = Vector2.new(xoffset, 0)
+	searchbkg.Size = UDim2.fromOffset(220, 37)
+	searchbkg.Position = UDim2.new(0.5, 0, 0, 13)
+	searchbkg.AnchorPoint = Vector2.new(0.5, 0)
 	searchbkg.BackgroundColor3 = color.Dark(uipallet.Main, 0.02)
 	searchbkg.Parent = clickgui
-	local searchlegit = Instance.new('TextLabel')
-	searchlegit.Size = UDim2.new(0.7, 1, 0, 37)
-	searchlegit.Position = UDim2.new(0.5, 4, 0, -1)
-	searchlegit.BackgroundTransparency = 1
-	searchlegit.FontFace = uipallet.Font
-	searchlegit.Text = ''
-	searchlegit.AnchorPoint = Vector2.new(0.5, 0)
-	searchlegit.TextSize = 14
-	searchlegit.Parent = searchbkg
-	searchlegit.TextXAlignment = Enum.TextXAlignment.Left
-	searchlegit.TextColor3 = Color3.new(1, 1, 1)
 	local searchicon = Instance.new('ImageLabel')
 	searchicon.Name = 'Icon'
 	searchicon.Size = UDim2.fromOffset(14, 14)
@@ -6010,14 +5998,15 @@ function mainapi:CreateSearch()
 	local legitdivider = Instance.new('Frame')
 	legitdivider.Name = 'LegitDivider'
 	legitdivider.Size = UDim2.fromOffset(2, 12)
-	legitdivider.Position = UDim2.fromOffset(76, 13)
+	legitdivider.Position = UDim2.fromOffset(43, 13)
 	legitdivider.BackgroundColor3 = color.Light(uipallet.Main, 0.14)
 	legitdivider.BorderSizePixel = 0
 	legitdivider.Parent = searchbkg
 	addBlur(searchbkg)
 	addCorner(searchbkg)
-	warn('what?')
 	local search = Instance.new('TextBox')
+	search.Size = UDim2.new(1, -50, 0, 37)
+	search.Position = UDim2.fromOffset(50, 0)
 	search.BackgroundTransparency = 1
 	search.Text = ''
 	search.PlaceholderText = ''
@@ -6027,10 +6016,6 @@ function mainapi:CreateSearch()
 	search.FontFace = uipallet.Font
 	search.ClearTextOnFocus = false
 	search.Parent = searchbkg
-	task.delay(1, function()
-		search.Size = UDim2.new(1, -100, 0, 37)
-		search.Position = UDim2.fromOffset(85, 0)
-	end)
 	local children = Instance.new('ScrollingFrame')
 	children.Name = 'Children'
 	children.Size = UDim2.new(1, 0, 1, -37)
