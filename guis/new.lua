@@ -172,11 +172,7 @@ local function safecall(func, ...)
 	local args = {...}
 	xpcall(function()
 		func(unpack(args))
-	end, function(err)
-		if (shared and shared.VapeDeveloper) or getgenv().VapeDeveloper then
-			warn(err)
-		end
-	end)
+	end, function() end)
 end
 
 local function addCloseButton(parent, offset)
@@ -479,6 +475,10 @@ local function makeDraggable(gui, window)
 	local ended
 	local renderConnection
 
+	local function getAbsolutePosition()
+		return Vector2.new(gui.AbsolutePosition.X / scale.Scale, gui.AbsolutePosition.Y / scale.Scale)
+	end
+
 	local function stopRenderIfDone()
 		if renderConnection and not dragging and currentPosition and targetPosition and (currentPosition - targetPosition).Magnitude < 0.45 then
 			gui.Position = UDim2.fromOffset(targetPosition.X, targetPosition.Y)
@@ -513,13 +513,10 @@ local function makeDraggable(gui, window)
 			and (inputObj.Position.Y - gui.AbsolutePosition.Y < 40 or window)
 		then
 			dragging = true
-			dragPosition = Vector2.new(
-				gui.AbsolutePosition.X - inputObj.Position.X,
-				gui.AbsolutePosition.Y - inputObj.Position.Y + guiService:GetGuiInset().Y
-			) / scale.Scale
-
-			currentPosition = Vector2.new(gui.Position.X.Offset, gui.Position.Y.Offset)
+			currentPosition = getAbsolutePosition()
 			targetPosition = currentPosition
+			gui.Position = UDim2.fromOffset(currentPosition.X, currentPosition.Y)
+			dragPosition = currentPosition - Vector2.new(inputObj.Position.X / scale.Scale, inputObj.Position.Y / scale.Scale)
 			startRenderLoop()
 
 			changed = inputService.InputChanged:Connect(function(input)
@@ -529,7 +526,7 @@ local function makeDraggable(gui, window)
 						dragPosition = (dragPosition // 3) * 3
 						position = (position // 3) * 3
 					end
-					targetPosition = Vector2.new((position.X / scale.Scale) + dragPosition.X, (position.Y / scale.Scale) + dragPosition.Y)
+					targetPosition = Vector2.new(position.X / scale.Scale, position.Y / scale.Scale) + dragPosition
 				end
 			end)
 
@@ -5954,25 +5951,13 @@ function mainapi:CreateCategoryList(categorysettings)
 end
 
 function mainapi:CreateSearch()
-	local xoffset = inputService.TouchEnabled and 0.3 or 0.5
 	local searchbkg = Instance.new('Frame')
 	searchbkg.Name = 'Search'
-	searchbkg.Size = UDim2.fromOffset(240, 37)
-	searchbkg.Position = UDim2.new(xoffset, 0, 0, 13)
-	searchbkg.AnchorPoint = Vector2.new(xoffset, 0)
+	searchbkg.Size = UDim2.fromOffset(220, 37)
+	searchbkg.Position = UDim2.new(0.5, 0, 0, 13)
+	searchbkg.AnchorPoint = Vector2.new(0.5, 0)
 	searchbkg.BackgroundColor3 = color.Dark(uipallet.Main, 0.02)
 	searchbkg.Parent = clickgui
-	local searchlegit = Instance.new('TextLabel')
-	searchlegit.Size = UDim2.new(0.7, 1, 0, 37)
-	searchlegit.Position = UDim2.new(0.5, 4, 0, -1)
-	searchlegit.BackgroundTransparency = 1
-	searchlegit.FontFace = uipallet.Font
-	searchlegit.Text = 'Legit'
-	searchlegit.AnchorPoint = Vector2.new(0.5, 0)
-	searchlegit.TextSize = 14
-	searchlegit.Parent = searchbkg
-	searchlegit.TextXAlignment = Enum.TextXAlignment.Left
-	searchlegit.TextColor3 = Color3.new(1, 1, 1)
 	local searchicon = Instance.new('ImageLabel')
 	searchicon.Name = 'Icon'
 	searchicon.Size = UDim2.fromOffset(14, 14)
@@ -5983,21 +5968,21 @@ function mainapi:CreateSearch()
 	searchicon.Parent = searchbkg
 	local legiticon = Instance.new('ImageButton')
 	legiticon.Name = 'Legit'
-	legiticon.Size = UDim2.fromOffset(29, 16)
-	legiticon.Position = UDim2.fromOffset(8, 11)
+	legiticon.Size = UDim2.fromOffset(16, 16)
+	legiticon.Position = UDim2.fromOffset(13, 11)
 	legiticon.BackgroundTransparency = 1
-	legiticon.Image = getcustomasset('newvape/assets/new/legit.png')
+	legiticon.Image = getcustomasset('newvape/assets/new/legittab.png')
+	legiticon.ImageColor3 = color.Light(uipallet.Main, 0.37)
 	legiticon.Parent = searchbkg
 	local legitdivider = Instance.new('Frame')
 	legitdivider.Name = 'LegitDivider'
 	legitdivider.Size = UDim2.fromOffset(2, 12)
-	legitdivider.Position = UDim2.fromOffset(76, 13)
+	legitdivider.Position = UDim2.fromOffset(39, 13)
 	legitdivider.BackgroundColor3 = color.Light(uipallet.Main, 0.14)
 	legitdivider.BorderSizePixel = 0
 	legitdivider.Parent = searchbkg
 	addBlur(searchbkg)
 	addCorner(searchbkg)
-	warn('what?')
 	local search = Instance.new('TextBox')
 	search.BackgroundTransparency = 1
 	search.Text = ''
@@ -6006,12 +5991,10 @@ function mainapi:CreateSearch()
 	search.TextColor3 = uipallet.Text
 	search.TextSize = 12
 	search.FontFace = uipallet.Font
+	search.Size = UDim2.new(1, -46, 0, 37)
+	search.Position = UDim2.fromOffset(46, 0)
 	search.ClearTextOnFocus = false
 	search.Parent = searchbkg
-	task.delay(1, function()
-		search.Size = UDim2.new(1, -100, 0, 37)
-		search.Position = UDim2.fromOffset(85, 0)
-	end)
 	local children = Instance.new('ScrollingFrame')
 	children.Name = 'Children'
 	children.Size = UDim2.new(1, 0, 1, -37)
@@ -6058,8 +6041,6 @@ function mainapi:CreateSearch()
 				v:Destroy()
 			end
 		end
-		search.Size = UDim2.new(1, -100, 0, 37)
-		search.Position = UDim2.fromOffset(85, 0)
 		if search.Text == '' then return end
 
 		for i, v in self.Modules do
@@ -6071,7 +6052,7 @@ function mainapi:CreateSearch()
 						v.Visible = false
 					end
 				end
-				button.Size = UDim2.fromOffset(240, 40)
+				button.Size = UDim2.fromOffset(220, 40)
 				button.Bind:Destroy()
 				button.Indicators.MATCHED.Visible = hasAlias
 				button.MouseButton1Click:Connect(function()
@@ -6129,7 +6110,7 @@ function mainapi:CreateSearch()
 			setthreadidentity(8)
 		end
 		children.CanvasSize = UDim2.fromOffset(0, windowlist.AbsoluteContentSize.Y / scale.Scale)
-		searchbkg.Size = UDim2.fromOffset(240, math.min(37 + windowlist.AbsoluteContentSize.Y / scale.Scale, 437))
+		searchbkg.Size = UDim2.fromOffset(220, math.min(37 + windowlist.AbsoluteContentSize.Y / scale.Scale, 437))
 	end)
 
 	self.Legit.Icon = legiticon
@@ -6291,6 +6272,7 @@ function mainapi:CreateLegit()
 		if modulesettings.Size then
 			local modulechildren = Instance.new('Frame')
 			modulechildren.Size = modulesettings.Size
+			modulechildren.Position = modulesettings.Position or UDim2.new(0.5, -math.floor(modulesettings.Size.X.Offset / 2), 0.5, -math.floor(modulesettings.Size.Y.Offset / 2))
 			modulechildren.BackgroundTransparency = 1
 			modulechildren.Visible = false
 			modulechildren.Parent = scaledgui
