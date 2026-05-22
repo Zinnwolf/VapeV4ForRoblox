@@ -58,9 +58,9 @@ local tween = {
 }
 local uipallet = {
 	Main = Color3.fromRGB(26, 25, 26),
-	Text = Color3.fromRGB(200, 200, 200),-
+	Text = Color3.fromRGB(200, 200, 200),
 	Font = Font.fromEnum(Enum.Font.Arial),
-	FontSemiBold = Font.fromEnum(Enum.Font.Arial, Enum.FontWeight.SemiBold),
+	FontSemiBold = Font.new(Font.fromEnum(Enum.Font.Arial).Family, Enum.FontWeight.SemiBold),
 	Tween = TweenInfo.new(0.16, Enum.EasingStyle.Linear)
 }
 
@@ -7942,7 +7942,7 @@ gui.ZIndexBehavior = Enum.ZIndexBehavior.Global
 gui.IgnoreGuiInset = true
 gui.OnTopOfCoreBlur = true
 if false then
-	gui.Parent = cloneref(game:GetService('CoreGui')
+	gui.Parent = cloneref(game:GetService('CoreGui'))
 else
 	gui.Parent = lplr.PlayerGui
 	gui.ResetOnSpawn = false
