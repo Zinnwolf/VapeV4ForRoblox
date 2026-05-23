@@ -3818,7 +3818,6 @@ run(function()
 	local AutoHeader
 	local Chance
 	local UseHBE
-	local HBEMultiplier
 	local connections = {}
 	local random = Random.new()
 
@@ -3841,15 +3840,6 @@ run(function()
 	local JUMP_HITBOX_OFFSET = CFrame.new(0, 5.5, 1)
 	local TRIGGER_STEP_THRESHOLD = 4
 	local TRIGGER_COOLDOWN = 1.5
-	local hbeMultiplier = 1.35
-
-	local function getHeaderHitboxSize()
-		if UseHBE and UseHBE.Enabled then
-			return JUMP_HITBOX_SIZE * hbeMultiplier
-		end
-
-		return JUMP_HITBOX_SIZE
-	end
 
 	local function addConnection(connection)
 		table.insert(connections, connection)
@@ -3864,6 +3854,45 @@ run(function()
 		end
 
 		table.clear(connections)
+	end
+
+	local function getHitboxExpansion()
+		local lib = vape and vape.Libraries and vape.Libraries.universal
+		return lib and lib.HitboxExpansion
+	end
+
+	local function getHBEMultiplier()
+		if not (UseHBE and UseHBE.Enabled) then
+			return 1
+		end
+
+		local expansion = getHitboxExpansion()
+		if not expansion then
+			return 1
+		end
+
+		if type(expansion.GetMultiplier) == 'function' then
+			return expansion:GetMultiplier('Ball') or 1
+		end
+
+		local state = expansion.State
+		if not state then
+			return 1
+		end
+
+		if state.All then
+			return state.AllMultiplier or 1
+		end
+
+		if state.Ball then
+			return state.BallMultiplier or 1
+		end
+
+		return 1
+	end
+
+	local function getHeaderSize()
+		return JUMP_HITBOX_SIZE * getHBEMultiplier()
 	end
 
 	local function rollChance()
@@ -3921,7 +3950,7 @@ run(function()
 
 	local function getFirstHitStep(points, rootCFrame)
 		local hitboxCFrame = rootCFrame * JUMP_HITBOX_OFFSET
-		local halfSize = getHeaderHitboxSize() / 2
+		local halfSize = getHeaderSize() / 2
 
 		for step, point in ipairs(points) do
 			local relative = hitboxCFrame:PointToObjectSpace(point)
@@ -3970,7 +3999,7 @@ run(function()
 			end
 
 			local hitbox = HitboxHandler.Create({
-				size = getHeaderHitboxSize(),
+				size = getHeaderSize(),
 				cframe = rootPart.CFrame * CFrame.new(0, 2, 1)
 			})
 
@@ -4132,22 +4161,7 @@ run(function()
 		Name = 'Use HBE',
 		Default = false,
 		Function = function() end,
-		Tooltip = 'Uses HBE hitbox size for AutoHeader'
-	})
-
-	HBEMultiplier = AutoHeader:CreateSlider({
-		Name = 'HBE Multiplier',
-		Min = 1,
-		Max = 35,
-		Default = 13.5,
-		Decimal = 10,
-		Function = function(val)
-			hbeMultiplier = val / 10
-		end,
-		Suffix = function(val)
-			return string.format('%.2fx', val / 10)
-		end,
-		Tooltip = 'AutoHeader hitbox multiplier'
+		Tooltip = 'Uses current HBE settings'
 	})
 
 	AutoHeader:Clean(function()
