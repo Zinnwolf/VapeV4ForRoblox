@@ -3800,6 +3800,363 @@ run(function()
 end)
 
 run(function()
+	local VirtualInputManager = game:GetService('VirtualInputManager')
+	local RunService = game:GetService('RunService')
+	local Workspace = game:GetService('Workspace')
+	local Players = game:GetService('Players')
+	local ReplicatedStorage = game:GetService('ReplicatedStorage')
+	local LocalPlayer = Players.LocalPlayer
+
+	local HitboxHandler = require(ReplicatedStorage.Modules.HitboxHandler)
+
+	local Knit = require(ReplicatedStorage.Packages.Knit)
+	Knit.OnStart():await()
+
+	local KeyHandlerService = Knit.GetService('KeyHandlerService')
+	local HeaderRemote = KeyHandlerService:GetKey('Header')
+
+	local AutoHeader
+	local Chance
+	local UseHBE
+	local HBEMultiplier
+	local connections = {}
+	local random = Random.new()
+
+	local ball
+	local hasTriggeredForThisJump = false
+	local triggerCooldown = false
+	local lastTriggerTime = 0
+
+	local BALL_NAME = 'Ball'
+	local TEMP_FOLDER = Workspace:WaitForChild('Temp')
+	local GRAVITY = Workspace.Gravity
+	local BALL_RADIUS = 1
+	local BOUNCE_ELASTICITY = 0.7
+	local SIM_STEP = 0.04
+	local TOTAL_LOOKAHEAD = 1.2
+	local NUM_MARKERS = math.floor(TOTAL_LOOKAHEAD / SIM_STEP)
+	local FLOOR_Y = 9.6
+
+	local JUMP_HITBOX_SIZE = Vector3.new(5, 4, 5)
+	local JUMP_HITBOX_OFFSET = CFrame.new(0, 5.5, 1)
+	local TRIGGER_STEP_THRESHOLD = 4
+	local TRIGGER_COOLDOWN = 1.5
+	local hbeMultiplier = 1.35
+
+	local function getHeaderHitboxSize()
+		if UseHBE and UseHBE.Enabled then
+			return JUMP_HITBOX_SIZE * hbeMultiplier
+		end
+
+		return JUMP_HITBOX_SIZE
+	end
+
+	local function addConnection(connection)
+		table.insert(connections, connection)
+		return connection
+	end
+
+	local function cleanConnections()
+		for _, connection in ipairs(connections) do
+			if connection and connection.Disconnect then
+				connection:Disconnect()
+			end
+		end
+
+		table.clear(connections)
+	end
+
+	local function rollChance()
+		local value = Chance and Chance.Value or 100
+		if value >= 100 then
+			return true
+		end
+
+		if value <= 0 then
+			return false
+		end
+
+		return random:NextNumber(0, 100) <= value
+	end
+
+	local function getExternalAcceleration(ballObj)
+		local acc = Vector3.zero
+		local forceObject = ballObj:FindFirstChildWhichIsA('VectorForce', true)
+
+		if forceObject and forceObject.Enabled then
+			local force = forceObject.Force
+
+			if forceObject.RelativeTo == Enum.ActuatorRelativeTo.Attachment0 and forceObject.Attachment0 then
+				force = forceObject.Attachment0.WorldCFrame:VectorToWorldSpace(force)
+			elseif forceObject.RelativeTo == Enum.ActuatorRelativeTo.Attachment1 and forceObject.Attachment1 then
+				force = forceObject.Attachment1.WorldCFrame:VectorToWorldSpace(force)
+			end
+
+			acc = force / ballObj.AssemblyMass
+		end
+
+		return acc
+	end
+
+	local function simulateTrajectory(startPos, startVel, externalAcc)
+		local points = {}
+		local pos = startPos
+		local vel = startVel
+		local gravity = Vector3.new(0, -GRAVITY, 0)
+
+		for _ = 1, NUM_MARKERS do
+			vel = vel + (gravity + externalAcc) * SIM_STEP
+			pos = pos + vel * SIM_STEP
+
+			if pos.Y - BALL_RADIUS <= FLOOR_Y then
+				pos = Vector3.new(pos.X, FLOOR_Y + BALL_RADIUS, pos.Z)
+				vel = Vector3.new(vel.X, -vel.Y * BOUNCE_ELASTICITY, vel.Z)
+			end
+
+			table.insert(points, pos)
+		end
+
+		return points
+	end
+
+	local function getFirstHitStep(points, rootCFrame)
+		local hitboxCFrame = rootCFrame * JUMP_HITBOX_OFFSET
+		local halfSize = getHeaderHitboxSize() / 2
+
+		for step, point in ipairs(points) do
+			local relative = hitboxCFrame:PointToObjectSpace(point)
+			if math.abs(relative.X) <= halfSize.X and math.abs(relative.Y) <= halfSize.Y and math.abs(relative.Z) <= halfSize.Z then
+				return step
+			end
+		end
+	end
+
+	local function performHeader()
+		local character = LocalPlayer.Character
+		if not character then return end
+
+		local humanoid = character:FindFirstChild('Humanoid')
+		local status = character:FindFirstChild('Status')
+		local rootPart = character:FindFirstChild('HumanoidRootPart')
+		if not humanoid or not status or not rootPart then return end
+
+		local animator = humanoid:FindFirstChild('Animator')
+		if not animator then return end
+
+		local data = LocalPlayer:FindFirstChild('Data')
+		local animationType = data and data:FindFirstChild('animationType')
+		local animFolder = animationType and ReplicatedStorage.AnimFolder:FindFirstChild(animationType.Value)
+		if not animFolder or not animFolder:FindFirstChild('Header') then return end
+
+		local headerAnimTrack = animator:LoadAnimation(animFolder.Header)
+		headerAnimTrack:Play(0, 1)
+
+		local speedBoost = Instance.new('NumberValue')
+		speedBoost.Name = 'SpeedBoost'
+		speedBoost.Value = -6
+		speedBoost.Parent = status
+		game.Debris:AddItem(speedBoost, 0.5)
+
+		local hitSent = false
+		local renderConnection
+
+		renderConnection = RunService.RenderStepped:Connect(function()
+			if hitSent then return end
+			if not AutoHeader.Enabled then
+				if renderConnection then
+					renderConnection:Disconnect()
+				end
+				return
+			end
+
+			local hitbox = HitboxHandler.Create({
+				size = getHeaderHitboxSize(),
+				cframe = rootPart.CFrame * CFrame.new(0, 2, 1)
+			})
+
+			if hitbox then
+				hitSent = true
+
+				local lookX = rootPart.CFrame.LookVector.X
+				local lookY = Workspace.CurrentCamera.CFrame.LookVector.Y
+				local lookZ = rootPart.CFrame.LookVector.Z
+				local vel = Vector3.new(lookX, lookY, lookZ) * 120
+				local finalVel
+
+				if vel.Y >= 50 then
+					finalVel = Vector3.new(vel.X * 0.6, 50, vel.Z * 0.6)
+				elseif vel.Y >= 40 then
+					finalVel = Vector3.new(vel.X * 0.75, vel.Y, vel.Z * 0.75)
+				elseif vel.Y >= 30 then
+					finalVel = Vector3.new(vel.X * 0.9, vel.Y, vel.Z * 0.9)
+				elseif vel.Y >= 20 then
+					finalVel = Vector3.new(vel.X, vel.Y, vel.Z)
+				elseif vel.Y < -55 then
+					finalVel = Vector3.new(vel.X * 1.05, -55, vel.Z * 1.05)
+				else
+					finalVel = Vector3.new(vel.X * 1.05, vel.Y, vel.Z * 1.05)
+				end
+
+				local rightOffset = rootPart.CFrame.RightVector * random:NextInteger(-12, 12)
+				local upOffset = random:NextInteger(-12, 12)
+				local finalVec = finalVel + rightOffset + Vector3.new(0, upOffset, 0)
+
+				HeaderRemote:FireServer(finalVec, hitbox)
+			end
+		end)
+
+		task.delay(0.3, function()
+			if renderConnection then
+				renderConnection:Disconnect()
+			end
+		end)
+	end
+
+	local function autoHeaderSequence()
+		local character = LocalPlayer.Character
+		if not character then return end
+
+		local humanoid = character:FindFirstChild('Humanoid')
+		local status = character:FindFirstChild('Status')
+		if not humanoid or not status then return end
+
+		if not LocalPlayer:FindFirstChild('InPlay') then return end
+		if status:FindFirstChild('Knockdown') then return end
+		if status:FindFirstChild('NoMovement') then return end
+		if status:FindFirstChild('KickCD') then return end
+		if ReplicatedStorage:FindFirstChild('gameStarting') then return end
+		if ReplicatedStorage:FindFirstChild('EndScreen') then return end
+		if humanoid.FloorMaterial == Enum.Material.Air then return end
+		if hasTriggeredForThisJump then return end
+		if triggerCooldown then return end
+
+		hasTriggeredForThisJump = true
+
+		if not rollChance() then
+			return
+		end
+
+		triggerCooldown = true
+		lastTriggerTime = tick()
+
+		VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Space, false, game)
+		task.wait(0.05)
+		VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Space, false, game)
+
+		task.wait(0.08)
+		performHeader()
+
+		task.delay(TRIGGER_COOLDOWN, function()
+			triggerCooldown = false
+		end)
+	end
+
+	local function findBall()
+		ball = TEMP_FOLDER:FindFirstChild(BALL_NAME)
+	end
+
+	local function start()
+		findBall()
+
+		addConnection(TEMP_FOLDER.ChildAdded:Connect(function(child)
+			if child.Name == BALL_NAME then
+				ball = child
+			end
+		end))
+
+		addConnection(TEMP_FOLDER.ChildRemoved:Connect(function(child)
+			if child == ball then
+				ball = nil
+			end
+		end))
+
+		addConnection(RunService.Heartbeat:Connect(function()
+			local character = LocalPlayer.Character
+			if character then
+				local humanoid = character:FindFirstChild('Humanoid')
+				if humanoid and humanoid.FloorMaterial == Enum.Material.Air then
+					hasTriggeredForThisJump = false
+				end
+			end
+
+			if triggerCooldown and tick() - lastTriggerTime > TRIGGER_COOLDOWN then
+				triggerCooldown = false
+			end
+		end))
+
+		addConnection(RunService.RenderStepped:Connect(function()
+			local character = LocalPlayer.Character
+			if not character then return end
+
+			local rootPart = character:FindFirstChild('HumanoidRootPart')
+			if not rootPart then return end
+			if not LocalPlayer:FindFirstChild('InPlay') then return end
+			if not ball or not ball:IsDescendantOf(Workspace) then return end
+
+			local points = simulateTrajectory(ball.Position, ball.AssemblyLinearVelocity, getExternalAcceleration(ball))
+			local hitStep = getFirstHitStep(points, rootPart.CFrame)
+
+			if hitStep and hitStep <= TRIGGER_STEP_THRESHOLD then
+				autoHeaderSequence()
+			end
+		end))
+	end
+
+	AutoHeader = vape.Categories.Utility:CreateModule({
+		Name = 'AutoHeader',
+		Function = function(callback)
+			if callback then
+				hasTriggeredForThisJump = false
+				triggerCooldown = false
+				lastTriggerTime = 0
+				start()
+			else
+				cleanConnections()
+				ball = nil
+				hasTriggeredForThisJump = false
+				triggerCooldown = false
+			end
+		end,
+		Tooltip = 'Automatically Header.'
+	})
+
+	Chance = AutoHeader:CreateSlider({
+		Name = 'Chance',
+		Min = 0,
+		Max = 100,
+		Default = 100,
+		Function = function() end
+	})
+
+	UseHBE = AutoHeader:CreateToggle({
+		Name = 'Use HBE',
+		Default = false,
+		Function = function() end,
+		Tooltip = 'Uses HBE hitbox size for AutoHeader'
+	})
+
+	HBEMultiplier = AutoHeader:CreateSlider({
+		Name = 'HBE Multiplier',
+		Min = 1,
+		Max = 35,
+		Default = 13.5,
+		Decimal = 10,
+		Function = function(val)
+			hbeMultiplier = val / 10
+		end,
+		Suffix = function(val)
+			return string.format('%.2fx', val / 10)
+		end,
+		Tooltip = 'AutoHeader hitbox multiplier'
+	})
+
+	AutoHeader:Clean(function()
+		cleanConnections()
+	end)
+end)
+
+																																					
+run(function()
 	local Panic = vape.Categories.Utility:CreateModule({
 		Name = 'Panic',
 		Function = function(callback)
