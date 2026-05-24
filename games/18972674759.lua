@@ -2377,6 +2377,7 @@ run(function()
 	local RootPart = nil
 
 	local AutoDive
+	local PreventTeamDives
 	local Connection = nil
 	local DiveCooldown = false
 	local VisContainer = nil
@@ -2422,8 +2423,122 @@ run(function()
 		game.Debris:AddItem(p, 0.1)
 	end
 
+	local function getLastKickedObject()
+		local ballStatus = Workspace:FindFirstChild("ballStatus")
+		return ballStatus and ballStatus:FindFirstChild("lastKicked")
+	end
+
+	local function getLastKickedValue()
+		local lastKicked = getLastKickedObject()
+		return lastKicked and lastKicked.Value
+	end
+
+	local function resolvePlayer(value)
+		if value == nil then
+			return nil
+		end
+
+		if typeof(value) == "Instance" then
+			if value:IsA("Player") then
+				return value
+			end
+
+			local fromCharacter = Players:GetPlayerFromCharacter(value)
+			if fromCharacter then
+				return fromCharacter
+			end
+
+			for _, player in ipairs(Players:GetPlayers()) do
+				if player.Character then
+					if value == player.Character or value:IsDescendantOf(player.Character) then
+						return player
+					end
+				end
+
+				if value.Name == player.Name or value.Name == player.DisplayName then
+					return player
+				end
+			end
+
+			return nil
+		end
+
+		if typeof(value) == "string" then
+			for _, player in ipairs(Players:GetPlayers()) do
+				if value == player.Name or value == player.DisplayName or value == tostring(player.UserId) then
+					return player
+				end
+			end
+
+			return nil
+		end
+
+		if typeof(value) == "number" then
+			for _, player in ipairs(Players:GetPlayers()) do
+				if value == player.UserId then
+					return player
+				end
+			end
+		end
+
+		return nil
+	end
+
+	local function getTeamValue(player)
+		if not player then
+			return nil
+		end
+
+		local selectedTeam = player:FindFirstChild("SelectedTeam")
+		if selectedTeam then
+			local success, value = pcall(function()
+				return selectedTeam.Value
+			end)
+
+			if success and value ~= nil then
+				if typeof(value) == "Instance" then
+					return value.Name
+				end
+
+				return tostring(value)
+			end
+		end
+
+		local team = player.Team
+		if team then
+			return team.Name
+		end
+
+		if player.TeamColor then
+			return tostring(player.TeamColor)
+		end
+
+		return nil
+	end
+
+	local function isLastKickedOnLocalTeam()
+		if not (PreventTeamDives and PreventTeamDives.Enabled) then
+			return false
+		end
+
+		local player = resolvePlayer(getLastKickedValue())
+		if not player then
+			return false
+		end
+
+		local localTeam = getTeamValue(LocalPlayer)
+		local playerTeam = getTeamValue(player)
+
+		return localTeam ~= nil and playerTeam ~= nil and localTeam == playerTeam
+	end
+
+	local function canAutoDive()
+		return not isLastKickedOnLocalTeam()
+	end
+
 	local function PerformDive(Direction, Mode)
 		if DiveCooldown then return end
+		if not canAutoDive() then return end
 		DiveCooldown = true
 
 		local holdKey = nil
@@ -2476,6 +2591,7 @@ run(function()
 
 	local function Update(dt)
 		if not AutoDive or not AutoDive.Enabled or not RootPart then return end
+		if not canAutoDive() then return end
 
 		local Ball = Workspace:FindFirstChild("Temp") and Workspace.Temp:FindFirstChild("Ball")
 		if not Ball then Ball = Workspace:FindFirstChild("Ball") end
@@ -2708,6 +2824,13 @@ run(function()
 		Default = false,
 		Function = function(val) ShowVisuals = val end,
 		Tooltip = 'Show prediction dots (debug)'
+	})
+
+	PreventTeamDives = AutoDive:CreateToggle({
+		Name = 'Prevent Team Dives',
+		Default = true,
+		Function = function() end,
+		Tooltip = 'Stops AutoDive when the ball belongs to your team'
 	})
 
 	LocalPlayer.CharacterAdded:Connect(onCharacterAdded)
