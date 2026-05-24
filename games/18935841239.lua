@@ -1808,6 +1808,8 @@ run(function()
 	local AutoHeader
 	local Chance
 	local UseHBE
+	local PreventTeamHeaders
+	local PreventSelfHeaders
 	local connections = {}
 	local random = Random.new()
 
@@ -1816,7 +1818,18 @@ run(function()
 	local triggerCooldown = false
 	local lastTriggerTime = 0
 	local shouldRun = false
+	local ownershipLoop
 	local renderSteppedConn
+	local watchedLastKicked
+
+	local startRenderLoop
+	local stopRenderLoop
+	local simulateTrajectory
+	local getExternalAcceleration
+	local getFirstHitStep
+	local autoHeaderSequence
+	local performHeader
+	local checkOwnership
 
 	local BALL_NAME = 'Ball'
 	local TEMP_FOLDER = Workspace:WaitForChild('Temp')
@@ -1845,37 +1858,148 @@ run(function()
 			end
 		end
 		table.clear(connections)
+
 		if renderSteppedConn then
 			renderSteppedConn:Disconnect()
 			renderSteppedConn = nil
 		end
+
+		if ownershipLoop then
+			task.cancel(ownershipLoop)
+			ownershipLoop = nil
+		end
+
+		watchedLastKicked = nil
 	end
 
-	local function isLocalPlayerOwner(value)
-		if value == LocalPlayer then return true end
-		if value == LocalPlayer.Character then return true end
+	local function getLastKickedObject()
+		local ballStatus = Workspace:FindFirstChild('ballStatus')
+		return ballStatus and ballStatus:FindFirstChild('lastKicked')
+	end
+
+	local function getLastKickedValue()
+		local lastKicked = getLastKickedObject()
+		return lastKicked and lastKicked.Value
+	end
+
+	local function resolvePlayer(value)
+		if value == nil then
+			return nil
+		end
+
 		if typeof(value) == 'Instance' then
-			if value:IsA('Player') then return value == LocalPlayer end
-			if LocalPlayer.Character and value:IsDescendantOf(LocalPlayer.Character) then return true end
-			if value.Name == LocalPlayer.Name or value.Name == LocalPlayer.DisplayName then return true end
+			if value:IsA('Player') then
+				return value
+			end
+
+			local fromCharacter = Players:GetPlayerFromCharacter(value)
+			if fromCharacter then
+				return fromCharacter
+			end
+
+			for _, player in ipairs(Players:GetPlayers()) do
+				if player.Character then
+					if value == player.Character or value:IsDescendantOf(player.Character) then
+						return player
+					end
+				end
+
+				if value.Name == player.Name or value.Name == player.DisplayName then
+					return player
+				end
+			end
+
+			return nil
+		end
+
+		if typeof(value) == 'string' then
+			for _, player in ipairs(Players:GetPlayers()) do
+				if value == player.Name or value == player.DisplayName or value == tostring(player.UserId) then
+					return player
+				end
+			end
+
+			return nil
+		end
+
+		if typeof(value) == 'number' then
+			for _, player in ipairs(Players:GetPlayers()) do
+				if value == player.UserId then
+					return player
+				end
+			end
+		end
+
+		return nil
+	end
+
+	local function getTeamValue(player)
+		if not player then
+			return nil
+		end
+
+		local selectedTeam = player:FindFirstChild('SelectedTeam')
+		if selectedTeam then
+			local success, value = pcall(function()
+				return selectedTeam.Value
+			end)
+
+			if success and value ~= nil then
+				if typeof(value) == 'Instance' then
+					return value.Name
+				end
+
+				return tostring(value)
+			end
+		end
+
+		local team = player.Team
+		if team then
+			return team.Name
+		end
+
+		if player.TeamColor then
+			return tostring(player.TeamColor)
+		end
+
+		return nil
+	end
+
+	local function isLastKickedLocalPlayer()
+		if not (PreventSelfHeaders and PreventSelfHeaders.Enabled) then
 			return false
 		end
-		if typeof(value) == 'string' then
-			return value == LocalPlayer.Name or value == LocalPlayer.DisplayName or value == tostring(LocalPlayer.UserId)
-		end
-		if typeof(value) == 'number' then
-			return value == LocalPlayer.UserId
-		end
-		return false
+
+		local player = resolvePlayer(getLastKickedValue())
+		return player == LocalPlayer
 	end
 
-	local function checkOwnership()
-		local ballStatus = Workspace:FindFirstChild('ballStatus')
-		local lastKicked = ballStatus and ballStatus:FindFirstChild('lastKicked')
-		local iOwn = lastKicked and isLocalPlayerOwner(lastKicked.Value) or false
-		local newShouldRun = not iOwn
+	local function isLastKickedOnLocalTeam()
+		if not (PreventTeamHeaders and PreventTeamHeaders.Enabled) then
+			return false
+		end
+
+		local player = resolvePlayer(getLastKickedValue())
+		if not player then
+			return false
+		end
+
+		local localTeam = getTeamValue(LocalPlayer)
+		local playerTeam = getTeamValue(player)
+
+		return localTeam ~= nil and playerTeam ~= nil and localTeam == playerTeam
+	end
+
+	local function canAutoHeader()
+		return not isLastKickedLocalPlayer() and not isLastKickedOnLocalTeam()
+	end
+
+	checkOwnership = function()
+		local newShouldRun = canAutoHeader()
+
 		if newShouldRun ~= shouldRun then
 			shouldRun = newShouldRun
+
 			if shouldRun then
 				startRenderLoop()
 			else
@@ -1884,30 +2008,65 @@ run(function()
 		end
 	end
 
-	local function startRenderLoop()
+	local function hookLastKickedChanged()
+		local lastKicked = getLastKickedObject()
+		if not lastKicked or lastKicked == watchedLastKicked then
+			return
+		end
+
+		watchedLastKicked = lastKicked
+
+		addConnection(lastKicked.Changed:Connect(function()
+			checkOwnership()
+		end))
+	end
+
+	startRenderLoop = function()
 		if renderSteppedConn then return end
+
 		renderSteppedConn = RunService.RenderStepped:Connect(function()
 			local character = LocalPlayer.Character
 			if not character then return end
+
 			local rootPart = character:FindFirstChild('HumanoidRootPart')
 			if not rootPart then return end
 			if not LocalPlayer:FindFirstChild('InPlay') then return end
 			if not shouldRun then return end
+			if not canAutoHeader() then return end
 			if not ball or not ball:IsDescendantOf(Workspace) then return end
 
 			local points = simulateTrajectory(ball.Position, ball.AssemblyLinearVelocity, getExternalAcceleration(ball))
 			local hitStep = getFirstHitStep(points, rootPart.CFrame)
+
 			if hitStep and hitStep <= TRIGGER_STEP_THRESHOLD then
 				autoHeaderSequence()
 			end
 		end)
 	end
 
-	local function stopRenderLoop()
+	stopRenderLoop = function()
 		if renderSteppedConn then
 			renderSteppedConn:Disconnect()
 			renderSteppedConn = nil
 		end
+	end
+
+	local function startOwnershipLoop()
+		if ownershipLoop then
+			task.cancel(ownershipLoop)
+			ownershipLoop = nil
+		end
+
+		hookLastKickedChanged()
+		checkOwnership()
+
+		ownershipLoop = task.spawn(function()
+			while AutoHeader and AutoHeader.Enabled do
+				hookLastKickedChanged()
+				checkOwnership()
+				task.wait(0.2)
+			end
+		end)
 	end
 
 	local function getHitboxExpansion()
@@ -1917,15 +2076,19 @@ run(function()
 
 	local function getHBEMultiplier()
 		if not (UseHBE and UseHBE.Enabled) then return 1 end
+
 		local expansion = getHitboxExpansion()
 		if not expansion then return 1 end
+
 		if type(expansion.GetMultiplier) == 'function' then
 			return expansion:GetMultiplier('Ball') or 1
 		end
+
 		local state = expansion.State
 		if not state then return 1 end
 		if state.All then return state.AllMultiplier or 1 end
 		if state.Ball then return state.BallMultiplier or 1 end
+
 		return 1
 	end
 
@@ -1940,59 +2103,74 @@ run(function()
 		return random:NextNumber(0, 100) <= value
 	end
 
-	local function getExternalAcceleration(ballObj)
+	getExternalAcceleration = function(ballObj)
 		local acc = Vector3.zero
 		local forceObject = ballObj:FindFirstChildWhichIsA('VectorForce', true)
+
 		if forceObject and forceObject.Enabled then
 			local force = forceObject.Force
+
 			if forceObject.RelativeTo == Enum.ActuatorRelativeTo.Attachment0 and forceObject.Attachment0 then
 				force = forceObject.Attachment0.WorldCFrame:VectorToWorldSpace(force)
 			elseif forceObject.RelativeTo == Enum.ActuatorRelativeTo.Attachment1 and forceObject.Attachment1 then
 				force = forceObject.Attachment1.WorldCFrame:VectorToWorldSpace(force)
 			end
+
 			acc = force / ballObj.AssemblyMass
 		end
+
 		return acc
 	end
 
-	local function simulateTrajectory(startPos, startVel, externalAcc)
+	simulateTrajectory = function(startPos, startVel, externalAcc)
 		local points = {}
 		local pos = startPos
 		local vel = startVel
 		local gravity = Vector3.new(0, -GRAVITY, 0)
+
 		for _ = 1, NUM_MARKERS do
 			vel = vel + (gravity + externalAcc) * SIM_STEP
 			pos = pos + vel * SIM_STEP
+
 			if pos.Y - BALL_RADIUS <= FLOOR_Y then
 				pos = Vector3.new(pos.X, FLOOR_Y + BALL_RADIUS, pos.Z)
 				vel = Vector3.new(vel.X, -vel.Y * BOUNCE_ELASTICITY, vel.Z)
 			end
+
 			table.insert(points, pos)
 		end
+
 		return points
 	end
 
-	local function getFirstHitStep(points, rootCFrame)
+	getFirstHitStep = function(points, rootCFrame)
 		local hitboxCFrame = rootCFrame * JUMP_HITBOX_OFFSET
 		local halfSize = getHeaderSize() / 2
+
 		for step, point in ipairs(points) do
 			local relative = hitboxCFrame:PointToObjectSpace(point)
+
 			if math.abs(relative.X) <= halfSize.X and math.abs(relative.Y) <= halfSize.Y and math.abs(relative.Z) <= halfSize.Z then
 				return step
 			end
 		end
 	end
 
-	local function performHeader()
-		if not shouldRun then return end  -- only header when we don't own the ball
+	performHeader = function()
+		if not shouldRun then return end
+		if not canAutoHeader() then return end
+
 		local character = LocalPlayer.Character
 		if not character then return end
+
 		local humanoid = character:FindFirstChild('Humanoid')
 		local status = character:FindFirstChild('Status')
 		local rootPart = character:FindFirstChild('HumanoidRootPart')
 		if not humanoid or not status or not rootPart then return end
+
 		local animator = humanoid:FindFirstChild('Animator')
 		if not animator then return end
+
 		local data = LocalPlayer:FindFirstChild('Data')
 		local animationType = data and data:FindFirstChild('animationType')
 		local animFolder = animationType and ReplicatedStorage.AnimFolder:FindFirstChild(animationType.Value)
@@ -2009,23 +2187,29 @@ run(function()
 
 		local hitSent = false
 		local innerConn
+
 		innerConn = RunService.RenderStepped:Connect(function()
 			if hitSent then return end
-			if not AutoHeader.Enabled or not shouldRun then
+
+			if not AutoHeader.Enabled or not shouldRun or not canAutoHeader() then
 				innerConn:Disconnect()
 				return
 			end
+
 			local hitbox = HitboxHandler.Create({
 				size = getHeaderSize(),
 				cframe = rootPart.CFrame * CFrame.new(0, 2, 1)
 			})
+
 			if hitbox then
 				hitSent = true
+
 				local lookX = rootPart.CFrame.LookVector.X
 				local lookY = Workspace.CurrentCamera.CFrame.LookVector.Y
 				local lookZ = rootPart.CFrame.LookVector.Z
 				local vel = Vector3.new(lookX, lookY, lookZ) * 120
 				local finalVel
+
 				if vel.Y >= 50 then
 					finalVel = Vector3.new(vel.X * 0.6, 50, vel.Z * 0.6)
 				elseif vel.Y >= 40 then
@@ -2039,21 +2223,31 @@ run(function()
 				else
 					finalVel = Vector3.new(vel.X * 1.05, vel.Y, vel.Z * 1.05)
 				end
+
 				local rightOffset = rootPart.CFrame.RightVector * random:NextInteger(-12, 12)
 				local upOffset = random:NextInteger(-12, 12)
 				local finalVec = finalVel + rightOffset + Vector3.new(0, upOffset, 0)
-				HeaderRemote:FireServer(finalVec, hitbox)
+
+				if shouldRun and canAutoHeader() then
+					HeaderRemote:FireServer(finalVec, hitbox)
+				end
 			end
 		end)
+
 		task.delay(0.3, function()
-			if innerConn then innerConn:Disconnect() end
+			if innerConn then
+				innerConn:Disconnect()
+			end
 		end)
 	end
 
-	local function autoHeaderSequence()
-		if not shouldRun then return end  -- only jump/header when we don't own the ball
+	autoHeaderSequence = function()
+		if not shouldRun then return end
+		if not canAutoHeader() then return end
+
 		local character = LocalPlayer.Character
 		if not character then return end
+
 		local humanoid = character:FindFirstChild('Humanoid')
 		local status = character:FindFirstChild('Status')
 		if not humanoid or not status then return end
@@ -2068,7 +2262,14 @@ run(function()
 		if triggerCooldown then return end
 
 		hasTriggeredForThisJump = true
+
 		if not rollChance() then return end
+
+		if not canAutoHeader() then
+			hasTriggeredForThisJump = false
+			return
+		end
+
 		triggerCooldown = true
 		lastTriggerTime = tick()
 
@@ -2076,7 +2277,10 @@ run(function()
 		task.wait(0.05)
 		VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Space, false, game)
 		task.wait(0.08)
-		performHeader()
+
+		if shouldRun and canAutoHeader() then
+			performHeader()
+		end
 
 		task.delay(TRIGGER_COOLDOWN, function()
 			triggerCooldown = false
@@ -2091,37 +2295,38 @@ run(function()
 		findBall()
 
 		addConnection(TEMP_FOLDER.ChildAdded:Connect(function(child)
-			if child.Name == BALL_NAME then ball = child end
+			if child.Name == BALL_NAME then
+				ball = child
+			end
 		end))
+
 		addConnection(TEMP_FOLDER.ChildRemoved:Connect(function(child)
-			if child == ball then ball = nil end
+			if child == ball then
+				ball = nil
+			end
 		end))
 
 		addConnection(RunService.Heartbeat:Connect(function()
 			local character = LocalPlayer.Character
+
 			if character then
 				local humanoid = character:FindFirstChild('Humanoid')
+
 				if humanoid and humanoid.FloorMaterial == Enum.Material.Air then
 					hasTriggeredForThisJump = false
 				end
 			end
+
 			if triggerCooldown and tick() - lastTriggerTime > TRIGGER_COOLDOWN then
 				triggerCooldown = false
 			end
 		end))
 
-		local ballStatus = Workspace:FindFirstChild('ballStatus')
-		local lastKicked = ballStatus and ballStatus:FindFirstChild('lastKicked')
-		if lastKicked then
-			addConnection(lastKicked.Changed:Connect(function()
-				checkOwnership()
-			end))
-			checkOwnership()
-		end
+		startOwnershipLoop()
 	end
 
 	AutoHeader = vape.Categories.Utility:CreateModule({
-		Name = 'Headers for you',
+		Name = 'AutoHeader',
 		Function = function(callback)
 			if callback then
 				hasTriggeredForThisJump = false
@@ -2134,9 +2339,10 @@ run(function()
 				ball = nil
 				hasTriggeredForThisJump = false
 				triggerCooldown = false
+				shouldRun = false
 			end
 		end,
-		Tooltip = 'Headers only when someone else last touched the ball.'
+		Tooltip = 'Headers for you.'
 	})
 
 	Chance = AutoHeader:CreateSlider({
@@ -2154,10 +2360,610 @@ run(function()
 		Tooltip = 'Uses current HBE settings'
 	})
 
+	PreventTeamHeaders = AutoHeader:CreateToggle({
+		Name = 'Prevent Team Headers',
+		Default = true,
+		Function = function()
+			if AutoHeader and AutoHeader.Enabled then
+				checkOwnership()
+			end
+		end,
+		Tooltip = 'Stops AutoHeader while lastKicked belongs to your team'
+	})
+
+	PreventSelfHeaders = AutoHeader:CreateToggle({
+		Name = 'Prevent Self Headers',
+		Default = true,
+		Function = function()
+			if AutoHeader and AutoHeader.Enabled then
+				checkOwnership()
+			end
+		end,
+		Tooltip = 'Stops AutoHeader while lastKicked belongs to you'
+	})
+
 	AutoHeader:Clean(function()
 		cleanConnections()
 	end)
 end)
+
+run(function()
+	local VirtualInputManager = game:GetService('VirtualInputManager')
+	local RunService = game:GetService('RunService')
+	local Workspace = game:GetService('Workspace')
+	local Players = game:GetService('Players')
+	local ReplicatedStorage = game:GetService('ReplicatedStorage')
+	local LocalPlayer = Players.LocalPlayer
+
+	local HitboxHandler = require(ReplicatedStorage.Modules.HitboxHandler)
+
+	local Knit = require(ReplicatedStorage.Packages.Knit)
+	Knit.OnStart():await()
+
+	local KeyHandlerService = Knit.GetService('KeyHandlerService')
+	local HeaderRemote = KeyHandlerService:GetKey('Header')
+
+	local AutoHeader
+	local Chance
+	local UseHBE
+	local PreventTeamHeaders
+	local connections = {}
+	local random = Random.new()
+
+	local ball
+	local hasTriggeredForThisJump = false
+	local triggerCooldown = false
+	local lastTriggerTime = 0
+	local shouldRun = false
+	local ownershipLoop
+	local renderSteppedConn
+	local watchedLastKicked
+
+	local startRenderLoop
+	local stopRenderLoop
+	local simulateTrajectory
+	local getExternalAcceleration
+	local getFirstHitStep
+	local autoHeaderSequence
+	local performHeader
+	local checkOwnership
+
+	local BALL_NAME = 'Ball'
+	local TEMP_FOLDER = Workspace:WaitForChild('Temp')
+	local GRAVITY = Workspace.Gravity
+	local BALL_RADIUS = 1
+	local BOUNCE_ELASTICITY = 0.7
+	local SIM_STEP = 0.04
+	local TOTAL_LOOKAHEAD = 1.2
+	local NUM_MARKERS = math.floor(TOTAL_LOOKAHEAD / SIM_STEP)
+	local FLOOR_Y = 9.6
+
+	local JUMP_HITBOX_SIZE = Vector3.new(5, 4, 5)
+	local JUMP_HITBOX_OFFSET = CFrame.new(0, 5.5, 1)
+	local TRIGGER_STEP_THRESHOLD = 4
+	local TRIGGER_COOLDOWN = 1.5
+
+	local function addConnection(connection)
+		table.insert(connections, connection)
+		return connection
+	end
+
+	local function cleanConnections()
+		for _, connection in ipairs(connections) do
+			if connection and connection.Disconnect then
+				connection:Disconnect()
+			end
+		end
+		table.clear(connections)
+
+		if renderSteppedConn then
+			renderSteppedConn:Disconnect()
+			renderSteppedConn = nil
+		end
+
+		if ownershipLoop then
+			task.cancel(ownershipLoop)
+			ownershipLoop = nil
+		end
+
+		watchedLastKicked = nil
+	end
+
+	local function getLastKickedObject()
+		local ballStatus = Workspace:FindFirstChild('ballStatus')
+		return ballStatus and ballStatus:FindFirstChild('lastKicked')
+	end
+
+	local function getLastKickedValue()
+		local lastKicked = getLastKickedObject()
+		return lastKicked and lastKicked.Value
+	end
+
+	local function resolvePlayer(value)
+		if value == nil then
+			return nil
+		end
+
+		if typeof(value) == 'Instance' then
+			if value:IsA('Player') then
+				return value
+			end
+
+			local fromCharacter = Players:GetPlayerFromCharacter(value)
+			if fromCharacter then
+				return fromCharacter
+			end
+
+			for _, player in ipairs(Players:GetPlayers()) do
+				if player.Character then
+					if value == player.Character or value:IsDescendantOf(player.Character) then
+						return player
+					end
+				end
+
+				if value.Name == player.Name or value.Name == player.DisplayName then
+					return player
+				end
+			end
+
+			return nil
+		end
+
+		if typeof(value) == 'string' then
+			for _, player in ipairs(Players:GetPlayers()) do
+				if value == player.Name or value == player.DisplayName or value == tostring(player.UserId) then
+					return player
+				end
+			end
+
+			return nil
+		end
+
+		if typeof(value) == 'number' then
+			for _, player in ipairs(Players:GetPlayers()) do
+				if value == player.UserId then
+					return player
+				end
+			end
+		end
+
+		return nil
+	end
+
+	local function getTeamValue(player)
+		if not player then
+			return nil
+		end
+
+		local selectedTeam = player:FindFirstChild('SelectedTeam')
+		if selectedTeam then
+			local success, value = pcall(function()
+				return selectedTeam.Value
+			end)
+
+			if success and value ~= nil then
+				if typeof(value) == 'Instance' then
+					return value.Name
+				end
+
+				return tostring(value)
+			end
+		end
+
+		local team = player.Team
+		if team then
+			return team.Name
+		end
+
+		if player.TeamColor then
+			return tostring(player.TeamColor)
+		end
+
+		return nil
+	end
+
+	local function isLastKickedOnLocalTeam()
+		if not (PreventTeamHeaders and PreventTeamHeaders.Enabled) then
+			return false
+		end
+
+		local player = resolvePlayer(getLastKickedValue())
+		if not player then
+			return false
+		end
+
+		local localTeam = getTeamValue(LocalPlayer)
+		local playerTeam = getTeamValue(player)
+
+		return localTeam ~= nil and playerTeam ~= nil and localTeam == playerTeam
+	end
+
+	local function canAutoHeader()
+		return not isLastKickedOnLocalTeam()
+	end
+
+	checkOwnership = function()
+		local newShouldRun = canAutoHeader()
+
+		if newShouldRun ~= shouldRun then
+			shouldRun = newShouldRun
+
+			if shouldRun then
+				startRenderLoop()
+			else
+				stopRenderLoop()
+			end
+		end
+	end
+
+	local function hookLastKickedChanged()
+		local lastKicked = getLastKickedObject()
+		if not lastKicked or lastKicked == watchedLastKicked then
+			return
+		end
+
+		watchedLastKicked = lastKicked
+
+		addConnection(lastKicked.Changed:Connect(function()
+			checkOwnership()
+		end))
+	end
+
+	startRenderLoop = function()
+		if renderSteppedConn then return end
+
+		renderSteppedConn = RunService.RenderStepped:Connect(function()
+			local character = LocalPlayer.Character
+			if not character then return end
+
+			local rootPart = character:FindFirstChild('HumanoidRootPart')
+			if not rootPart then return end
+			if not LocalPlayer:FindFirstChild('InPlay') then return end
+			if not shouldRun then return end
+			if not canAutoHeader() then return end
+			if not ball or not ball:IsDescendantOf(Workspace) then return end
+
+			local points = simulateTrajectory(ball.Position, ball.AssemblyLinearVelocity, getExternalAcceleration(ball))
+			local hitStep = getFirstHitStep(points, rootPart.CFrame)
+
+			if hitStep and hitStep <= TRIGGER_STEP_THRESHOLD then
+				autoHeaderSequence()
+			end
+		end)
+	end
+
+	stopRenderLoop = function()
+		if renderSteppedConn then
+			renderSteppedConn:Disconnect()
+			renderSteppedConn = nil
+		end
+	end
+
+	local function startOwnershipLoop()
+		if ownershipLoop then
+			task.cancel(ownershipLoop)
+			ownershipLoop = nil
+		end
+
+		hookLastKickedChanged()
+		checkOwnership()
+
+		ownershipLoop = task.spawn(function()
+			while AutoHeader and AutoHeader.Enabled do
+				hookLastKickedChanged()
+				checkOwnership()
+				task.wait(0.2)
+			end
+		end)
+	end
+
+	local function getHitboxExpansion()
+		local lib = vape and vape.Libraries and vape.Libraries.universal
+		return lib and lib.HitboxExpansion
+	end
+
+	local function getHBEMultiplier()
+		if not (UseHBE and UseHBE.Enabled) then return 1 end
+
+		local expansion = getHitboxExpansion()
+		if not expansion then return 1 end
+
+		if type(expansion.GetMultiplier) == 'function' then
+			return expansion:GetMultiplier('Ball') or 1
+		end
+
+		local state = expansion.State
+		if not state then return 1 end
+		if state.All then return state.AllMultiplier or 1 end
+		if state.Ball then return state.BallMultiplier or 1 end
+
+		return 1
+	end
+
+	local function getHeaderSize()
+		return JUMP_HITBOX_SIZE * getHBEMultiplier()
+	end
+
+	local function rollChance()
+		local value = Chance and Chance.Value or 100
+		if value >= 100 then return true end
+		if value <= 0 then return false end
+		return random:NextNumber(0, 100) <= value
+	end
+
+	getExternalAcceleration = function(ballObj)
+		local acc = Vector3.zero
+		local forceObject = ballObj:FindFirstChildWhichIsA('VectorForce', true)
+
+		if forceObject and forceObject.Enabled then
+			local force = forceObject.Force
+
+			if forceObject.RelativeTo == Enum.ActuatorRelativeTo.Attachment0 and forceObject.Attachment0 then
+				force = forceObject.Attachment0.WorldCFrame:VectorToWorldSpace(force)
+			elseif forceObject.RelativeTo == Enum.ActuatorRelativeTo.Attachment1 and forceObject.Attachment1 then
+				force = forceObject.Attachment1.WorldCFrame:VectorToWorldSpace(force)
+			end
+
+			acc = force / ballObj.AssemblyMass
+		end
+
+		return acc
+	end
+
+	simulateTrajectory = function(startPos, startVel, externalAcc)
+		local points = {}
+		local pos = startPos
+		local vel = startVel
+		local gravity = Vector3.new(0, -GRAVITY, 0)
+
+		for _ = 1, NUM_MARKERS do
+			vel = vel + (gravity + externalAcc) * SIM_STEP
+			pos = pos + vel * SIM_STEP
+
+			if pos.Y - BALL_RADIUS <= FLOOR_Y then
+				pos = Vector3.new(pos.X, FLOOR_Y + BALL_RADIUS, pos.Z)
+				vel = Vector3.new(vel.X, -vel.Y * BOUNCE_ELASTICITY, vel.Z)
+			end
+
+			table.insert(points, pos)
+		end
+
+		return points
+	end
+
+	getFirstHitStep = function(points, rootCFrame)
+		local hitboxCFrame = rootCFrame * JUMP_HITBOX_OFFSET
+		local halfSize = getHeaderSize() / 2
+
+		for step, point in ipairs(points) do
+			local relative = hitboxCFrame:PointToObjectSpace(point)
+
+			if math.abs(relative.X) <= halfSize.X and math.abs(relative.Y) <= halfSize.Y and math.abs(relative.Z) <= halfSize.Z then
+				return step
+			end
+		end
+	end
+
+	performHeader = function()
+		if not shouldRun then return end
+		if not canAutoHeader() then return end
+
+		local character = LocalPlayer.Character
+		if not character then return end
+
+		local humanoid = character:FindFirstChild('Humanoid')
+		local status = character:FindFirstChild('Status')
+		local rootPart = character:FindFirstChild('HumanoidRootPart')
+		if not humanoid or not status or not rootPart then return end
+
+		local animator = humanoid:FindFirstChild('Animator')
+		if not animator then return end
+
+		local data = LocalPlayer:FindFirstChild('Data')
+		local animationType = data and data:FindFirstChild('animationType')
+		local animFolder = animationType and ReplicatedStorage.AnimFolder:FindFirstChild(animationType.Value)
+		if not animFolder or not animFolder:FindFirstChild('Header') then return end
+
+		local headerAnimTrack = animator:LoadAnimation(animFolder.Header)
+		headerAnimTrack:Play(0, 1)
+
+		local speedBoost = Instance.new('NumberValue')
+		speedBoost.Name = 'SpeedBoost'
+		speedBoost.Value = -6
+		speedBoost.Parent = status
+		game.Debris:AddItem(speedBoost, 0.5)
+
+		local hitSent = false
+		local innerConn
+
+		innerConn = RunService.RenderStepped:Connect(function()
+			if hitSent then return end
+
+			if not AutoHeader.Enabled or not shouldRun or not canAutoHeader() then
+				innerConn:Disconnect()
+				return
+			end
+
+			local hitbox = HitboxHandler.Create({
+				size = getHeaderSize(),
+				cframe = rootPart.CFrame * CFrame.new(0, 2, 1)
+			})
+
+			if hitbox then
+				hitSent = true
+
+				local lookX = rootPart.CFrame.LookVector.X
+				local lookY = Workspace.CurrentCamera.CFrame.LookVector.Y
+				local lookZ = rootPart.CFrame.LookVector.Z
+				local vel = Vector3.new(lookX, lookY, lookZ) * 120
+				local finalVel
+
+				if vel.Y >= 50 then
+					finalVel = Vector3.new(vel.X * 0.6, 50, vel.Z * 0.6)
+				elseif vel.Y >= 40 then
+					finalVel = Vector3.new(vel.X * 0.75, vel.Y, vel.Z * 0.75)
+				elseif vel.Y >= 30 then
+					finalVel = Vector3.new(vel.X * 0.9, vel.Y, vel.Z * 0.9)
+				elseif vel.Y >= 20 then
+					finalVel = Vector3.new(vel.X, vel.Y, vel.Z)
+				elseif vel.Y < -55 then
+					finalVel = Vector3.new(vel.X * 1.05, -55, vel.Z * 1.05)
+				else
+					finalVel = Vector3.new(vel.X * 1.05, vel.Y, vel.Z * 1.05)
+				end
+
+				local rightOffset = rootPart.CFrame.RightVector * random:NextInteger(-12, 12)
+				local upOffset = random:NextInteger(-12, 12)
+				local finalVec = finalVel + rightOffset + Vector3.new(0, upOffset, 0)
+
+				if shouldRun and canAutoHeader() then
+					HeaderRemote:FireServer(finalVec, hitbox)
+				end
+			end
+		end)
+
+		task.delay(0.3, function()
+			if innerConn then
+				innerConn:Disconnect()
+			end
+		end)
+	end
+
+	autoHeaderSequence = function()
+		if not shouldRun then return end
+		if not canAutoHeader() then return end
+
+		local character = LocalPlayer.Character
+		if not character then return end
+
+		local humanoid = character:FindFirstChild('Humanoid')
+		local status = character:FindFirstChild('Status')
+		if not humanoid or not status then return end
+		if not LocalPlayer:FindFirstChild('InPlay') then return end
+		if status:FindFirstChild('Knockdown') then return end
+		if status:FindFirstChild('NoMovement') then return end
+		if status:FindFirstChild('KickCD') then return end
+		if ReplicatedStorage:FindFirstChild('gameStarting') then return end
+		if ReplicatedStorage:FindFirstChild('EndScreen') then return end
+		if humanoid.FloorMaterial == Enum.Material.Air then return end
+		if hasTriggeredForThisJump then return end
+		if triggerCooldown then return end
+
+		hasTriggeredForThisJump = true
+
+		if not rollChance() then return end
+
+		if not canAutoHeader() then
+			hasTriggeredForThisJump = false
+			return
+		end
+
+		triggerCooldown = true
+		lastTriggerTime = tick()
+
+		VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Space, false, game)
+		task.wait(0.05)
+		VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Space, false, game)
+		task.wait(0.08)
+
+		if shouldRun and canAutoHeader() then
+			performHeader()
+		end
+
+		task.delay(TRIGGER_COOLDOWN, function()
+			triggerCooldown = false
+		end)
+	end
+
+	local function findBall()
+		ball = TEMP_FOLDER:FindFirstChild(BALL_NAME)
+	end
+
+	local function start()
+		findBall()
+
+		addConnection(TEMP_FOLDER.ChildAdded:Connect(function(child)
+			if child.Name == BALL_NAME then
+				ball = child
+			end
+		end))
+
+		addConnection(TEMP_FOLDER.ChildRemoved:Connect(function(child)
+			if child == ball then
+				ball = nil
+			end
+		end))
+
+		addConnection(RunService.Heartbeat:Connect(function()
+			local character = LocalPlayer.Character
+
+			if character then
+				local humanoid = character:FindFirstChild('Humanoid')
+
+				if humanoid and humanoid.FloorMaterial == Enum.Material.Air then
+					hasTriggeredForThisJump = false
+				end
+			end
+
+			if triggerCooldown and tick() - lastTriggerTime > TRIGGER_COOLDOWN then
+				triggerCooldown = false
+			end
+		end))
+
+		startOwnershipLoop()
+	end
+
+	AutoHeader = vape.Categories.Utility:CreateModule({
+		Name = 'AutoHeader',
+		Function = function(callback)
+			if callback then
+				hasTriggeredForThisJump = false
+				triggerCooldown = false
+				lastTriggerTime = 0
+				shouldRun = false
+				start()
+			else
+				cleanConnections()
+				ball = nil
+				hasTriggeredForThisJump = false
+				triggerCooldown = false
+				shouldRun = false
+			end
+		end,
+		Tooltip = 'Headers for you.'
+	})
+
+	Chance = AutoHeader:CreateSlider({
+		Name = 'Chance',
+		Min = 0,
+		Max = 100,
+		Default = 100,
+		Function = function() end
+	})
+
+	UseHBE = AutoHeader:CreateToggle({
+		Name = 'Use HBE',
+		Default = false,
+		Function = function() end,
+		Tooltip = 'Uses current HBE settings'
+	})
+
+	PreventTeamHeaders = AutoHeader:CreateToggle({
+		Name = 'Prevent Team Headers',
+		Default = true,
+		Function = function()
+			if AutoHeader and AutoHeader.Enabled then
+				checkOwnership()
+			end
+		end,
+		Tooltip = 'Headers for you.'
+	})
+
+	AutoHeader:Clean(function()
+		cleanConnections()
+	end)
+end)
+
 		
 run(function()
 	local RunService = game:GetService("RunService")
@@ -2169,6 +2975,8 @@ run(function()
 	local RootPart = nil
 
 	local AutoDive
+	local PreventTeamDives
+	local PreventTeamDivesState = true
 	local Connection = nil
 	local DiveCooldown = false
 	local VisContainer = nil
@@ -2214,8 +3022,122 @@ run(function()
 		game.Debris:AddItem(p, 0.1)
 	end
 
+	local function getLastKickedObject()
+		local ballStatus = Workspace:FindFirstChild("ballStatus")
+		return ballStatus and ballStatus:FindFirstChild("lastKicked")
+	end
+
+	local function getLastKickedValue()
+		local lastKicked = getLastKickedObject()
+		return lastKicked and lastKicked.Value
+	end
+
+	local function resolvePlayer(value)
+		if value == nil then
+			return nil
+		end
+
+		if typeof(value) == "Instance" then
+			if value:IsA("Player") then
+				return value
+			end
+
+			local fromCharacter = Players:GetPlayerFromCharacter(value)
+			if fromCharacter then
+				return fromCharacter
+			end
+
+			for _, player in ipairs(Players:GetPlayers()) do
+				if player.Character then
+					if value == player.Character or value:IsDescendantOf(player.Character) then
+						return player
+					end
+				end
+
+				if value.Name == player.Name or value.Name == player.DisplayName then
+					return player
+				end
+			end
+
+			return nil
+		end
+
+		if typeof(value) == "string" then
+			for _, player in ipairs(Players:GetPlayers()) do
+				if value == player.Name or value == player.DisplayName or value == tostring(player.UserId) then
+					return player
+				end
+			end
+
+			return nil
+		end
+
+		if typeof(value) == "number" then
+			for _, player in ipairs(Players:GetPlayers()) do
+				if value == player.UserId then
+					return player
+				end
+			end
+		end
+
+		return nil
+	end
+
+	local function getTeamValue(player)
+		if not player then
+			return nil
+		end
+
+		local selectedTeam = player:FindFirstChild("SelectedTeam")
+		if selectedTeam then
+			local success, value = pcall(function()
+				return selectedTeam.Value
+			end)
+
+			if success and value ~= nil then
+				if typeof(value) == "Instance" then
+					return value.Name
+				end
+
+				return tostring(value)
+			end
+		end
+
+		local team = player.Team
+		if team then
+			return team.Name
+		end
+
+		if player.TeamColor then
+			return tostring(player.TeamColor)
+		end
+
+		return nil
+	end
+
+	local function isLastKickedOnLocalTeam()
+		if not PreventTeamDivesState then
+			return false
+		end
+
+		local player = resolvePlayer(getLastKickedValue())
+		if not player then
+			return false
+		end
+
+		local localTeam = getTeamValue(LocalPlayer)
+		local playerTeam = getTeamValue(player)
+
+		return localTeam ~= nil and playerTeam ~= nil and localTeam == playerTeam
+	end
+
+	local function canAutoDive()
+		return not isLastKickedOnLocalTeam()
+	end
+
 	local function PerformDive(Direction, Mode)
 		if DiveCooldown then return end
+		if not canAutoDive() then return end
 		DiveCooldown = true
 
 		local holdKey = nil
@@ -2224,34 +3146,94 @@ run(function()
 		end
 
 		task.spawn(function()
+			local keyHeld = false
+			local spaceHeld = false
+			local mouseHeld = false
+
+			local function releaseInputs()
+				if mouseHeld then
+					VirtualInputManager:SendMouseButtonEvent(0, 0, 1, false, game, 1)
+					mouseHeld = false
+				end
+
+				if spaceHeld then
+					VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Space, false, game)
+					spaceHeld = false
+				end
+
+				if keyHeld and holdKey then
+					VirtualInputManager:SendKeyEvent(false, holdKey, false, game)
+					keyHeld = false
+				end
+			end
+
+			local function stillAllowed()
+				return AutoDive and AutoDive.Enabled and canAutoDive()
+			end
+
+			if not stillAllowed() then
+				DiveCooldown = false
+				return
+			end
+
 			if holdKey then
 				VirtualInputManager:SendKeyEvent(true, holdKey, false, game)
+				keyHeld = true
 			end
 
 			if Mode == "High" then
+				if not stillAllowed() then
+					releaseInputs()
+					DiveCooldown = false
+					return
+				end
+
 				VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Space, false, game)
+				spaceHeld = true
 				task.wait(DelayHighDive)
+
+				if not stillAllowed() then
+					releaseInputs()
+					DiveCooldown = false
+					return
+				end
+
 				VirtualInputManager:SendMouseButtonEvent(0, 0, 1, true, game, 1)
+				mouseHeld = true
 
 			elseif Mode == "Mid" then
+				if not stillAllowed() then
+					releaseInputs()
+					DiveCooldown = false
+					return
+				end
+
 				VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Space, false, game)
+				spaceHeld = true
 				task.wait(DelayMidDive)
+
+				if not stillAllowed() then
+					releaseInputs()
+					DiveCooldown = false
+					return
+				end
+
 				VirtualInputManager:SendMouseButtonEvent(0, 0, 1, true, game, 1)
+				mouseHeld = true
 
 			elseif Mode == "Low" then
+				if not stillAllowed() then
+					releaseInputs()
+					DiveCooldown = false
+					return
+				end
+
 				VirtualInputManager:SendMouseButtonEvent(0, 0, 1, true, game, 1)
+				mouseHeld = true
 			end
 
 			task.wait(0.1)
-			VirtualInputManager:SendMouseButtonEvent(0, 0, 1, false, game, 1)
-
-			if Mode == "High" or Mode == "Mid" then
-				VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Space, false, game)
-			end
-
-			if holdKey then
-				VirtualInputManager:SendKeyEvent(false, holdKey, false, game)
-			end
+			releaseInputs()
 
 			task.wait(0.8)
 			DiveCooldown = false
@@ -2268,6 +3250,7 @@ run(function()
 
 	local function Update(dt)
 		if not AutoDive or not AutoDive.Enabled or not RootPart then return end
+		if not canAutoDive() then return end
 
 		local Ball = Workspace:FindFirstChild("Temp") and Workspace.Temp:FindFirstChild("Ball")
 		if not Ball then Ball = Workspace:FindFirstChild("Ball") end
@@ -2500,6 +3483,18 @@ run(function()
 		Default = false,
 		Function = function(val) ShowVisuals = val end,
 		Tooltip = 'Show prediction dots (debug)'
+	})
+
+	PreventTeamDives = AutoDive:CreateToggle({
+		Name = 'Prevent Team Dives',
+		Default = true,
+		Function = function(callback)
+			PreventTeamDivesState = callback
+			if not callback then
+				DiveCooldown = false
+			end
+		end,
+		Tooltip = 'Stops AutoDive when lastKicked belongs to your team'
 	})
 
 	LocalPlayer.CharacterAdded:Connect(onCharacterAdded)
