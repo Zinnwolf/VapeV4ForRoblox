@@ -3593,7 +3593,7 @@ function mainapi:CreateGUI()
 
 		task.spawn(function()
 			tooltip.Text = 'Copied!'
-			setclipboard('https://discord.gg/5gJqhQmrdS')
+			setclipboard('https://discord.gg/r9kJJ52aUy')
 		end)
 	end)
 	settingsbutton.MouseEnter:Connect(function()
@@ -5764,11 +5764,6 @@ end))
 mainapi:CreateGUI()
 mainapi.Categories.Main:CreateDivider()
 mainapi:CreateCategory({
-	Name = 'Combat',
-	Icon = getcustomasset('newvape/assets/new/combaticon.png'),
-	Size = UDim2.fromOffset(13, 14)
-})
-mainapi:CreateCategory({
 	Name = 'Blatant',
 	Icon = getcustomasset('newvape/assets/new/blatanticon.png'),
 	Size = UDim2.fromOffset(14, 14)
@@ -5784,24 +5779,31 @@ mainapi:CreateCategory({
 	Size = UDim2.fromOffset(15, 14)
 })
 mainapi:CreateCategory({
+	Name = 'Instant actions',
+	Icon = getcustomasset('newvape/assets/new/instants.png'),
+	Size = UDim2.fromOffset(17, 21)
+})
+do
+	local categorymeta = getmetatable(mainapi.Categories)
+	setmetatable(mainapi.Categories, {
+		__index = function(tab, ind)
+			if ind == 'Minigames' or ind == 'InstantActions' or ind == 'Instant Actions' then
+				return rawget(tab, 'Instant actions')
+			end
+
+			local oldindex = categorymeta and categorymeta.__index
+			return type(oldindex) == 'function' and oldindex(tab, ind) or type(oldindex) == 'table' and oldindex[ind] or nil
+		end,
+		__newindex = categorymeta and categorymeta.__newindex
+	})
+end
+mainapi.Categories.InstantActions = mainapi.Categories['Instant actions']
+mainapi.Categories['Instant Actions'] = mainapi.Categories['Instant actions']
+mainapi.Categories.Minigames = mainapi.Categories['Instant actions']
+mainapi:CreateCategory({
 	Name = 'World',
 	Icon = getcustomasset('newvape/assets/new/worldicon.png'),
 	Size = UDim2.fromOffset(14, 14)
-})
-mainapi:CreateCategory({
-	Name = 'Inventory',
-	Icon = getcustomasset('newvape/assets/new/inventoryicon.png'),
-	Size = UDim2.fromOffset(15, 14)
-})
-mainapi:CreateCategory({
-	Name = 'Minigames',
-	Icon = getcustomasset('newvape/assets/new/miniicon.png'),
-	Size = UDim2.fromOffset(19, 12)
-})
-mainapi:CreateCategory({
-	Name = 'Instant Actions',
-	Icon = getcustomasset('newvape/assets/new/instants.png'),
-	Size = UDim2.fromOffset(13, 16)
 })
 mainapi.Categories.Main:CreateDivider('misc')
 
@@ -6085,16 +6087,13 @@ guipane:CreateButton({
 	Function = function()
 		local priority = {
 			GUICategory = 1,
-			CombatCategory = 2,
-			BlatantCategory = 3,
-			RenderCategory = 4,
-			UtilityCategory = 5,
+			BlatantCategory = 2,
+			RenderCategory = 3,
+			UtilityCategory = 4,
+			['Instant actionsCategory'] = 5,
 			WorldCategory = 6,
-			InventoryCategory = 7,
-			MinigamesCategory = 8,
-			['Instant ActionsCategory'] = 9,
-			FriendsCategory = 10,
-			ProfilesCategory = 11
+			FriendsCategory = 7,
+			ProfilesCategory = 8
 		}
 		local categories = {}
 		for _, v in mainapi.Categories do
