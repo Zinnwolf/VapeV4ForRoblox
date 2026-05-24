@@ -1,5 +1,10 @@
 repeat task.wait() until game:IsLoaded()
-if shared.vape then shared.vape:Uninject() end
+if shared.vape then
+	pcall(function()
+		shared.vape:Uninject()
+	end)
+	shared.vape = nil
+end
 
 -- why do exploits fail to implement anything correctly? Is it really that hard?
 if identifyexecutor then
@@ -9,8 +14,9 @@ if identifyexecutor then
 end
 
 local vape
+local oldloadstring = loadstring
 local loadstring = function(...)
-	local res, err = loadstring(...)
+	local res, err = oldloadstring(...)
 	if err and vape then
 		vape:CreateNotification('Vape', 'Failed to load : '..err, 30, 'alert')
 	end
@@ -98,6 +104,7 @@ shared.vape = vape
 
 if not shared.VapeIndependent then
 	loadstring(downloadFile('newvape/games/universal.lua'), 'universal')()
+
 	if isfile('newvape/games/'..game.PlaceId..'.lua') then
 		loadstring(readfile('newvape/games/'..game.PlaceId..'.lua'), tostring(game.PlaceId))(...)
 	else
@@ -110,6 +117,7 @@ if not shared.VapeIndependent then
 			end
 		end
 	end
+
 	finishLoading()
 else
 	vape.Init = finishLoading
