@@ -97,19 +97,28 @@ vape = loadstring(downloadFile('newvape/guis/'..gui..'.lua'), 'gui')()
 shared.vape = vape
 
 if not shared.VapeIndependent then
-	loadstring(downloadFile('newvape/games/universal.lua'), 'universal')()
-	if isfile('newvape/games/'..game.PlaceId..'.lua') then
-		loadstring(readfile('newvape/games/'..game.PlaceId..'.lua'), tostring(game.PlaceId))(...)
+	local gameFile = 'newvape/games/'..game.PlaceId..'.lua'
+	local loadedGameFile = false
+
+	if isfile(gameFile) then
+		loadstring(readfile(gameFile), tostring(game.PlaceId))(...)
+		loadedGameFile = true
 	else
 		if not shared.VapeDeveloper then
 			local suc, res = pcall(function()
 				return game:HttpGet('https://raw.githubusercontent.com/Zinnwolf/VapeV4ForRoblox/'..readfile('newvape/profiles/commit.txt')..'/games/'..game.PlaceId..'.lua', true)
 			end)
 			if suc and res ~= '404: Not Found' then
-				loadstring(downloadFile('newvape/games/'..game.PlaceId..'.lua'), tostring(game.PlaceId))(...)
+				loadstring(downloadFile(gameFile), tostring(game.PlaceId))(...)
+				loadedGameFile = true
 			end
 		end
 	end
+
+	if not loadedGameFile then
+		loadstring(downloadFile('newvape/games/universal.lua'), 'universal')()
+	end
+
 	finishLoading()
 else
 	vape.Init = finishLoading
