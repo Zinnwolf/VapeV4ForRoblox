@@ -2163,7 +2163,9 @@ run(function()
 			local rootPart = character:FindFirstChild('HumanoidRootPart')
 			if not rootPart then return end
 			if not LocalPlayer:FindFirstChild('InPlay') then return end
+
 			if not canHeaderFromLastKicked() then return end
+
 			if not ball or not ball:IsDescendantOf(Workspace) then return end
 
 			local points = simulateTrajectory(ball.Position, ball.AssemblyLinearVelocity, getExternalAcceleration(ball))
