@@ -1846,6 +1846,44 @@ run(function()
 		table.clear(connections)
 	end
 
+	local function canHeaderFromLastKicked()
+		local ballStatus = Workspace:FindFirstChild('ballStatus')
+		local lastKicked = ballStatus and ballStatus:FindFirstChild('lastKicked')
+		if not lastKicked then
+			return false
+		end
+
+		local value = lastKicked.Value
+
+		if value == LocalPlayer then
+			return true
+		end
+
+		if value == LocalPlayer.Character then
+			return true
+		end
+
+		if typeof(value) == 'Instance' then
+			if value:IsA('Player') then
+				return value == LocalPlayer
+			end
+
+			if LocalPlayer.Character and value:IsDescendantOf(LocalPlayer.Character) then
+				return true
+			end
+		end
+
+		if typeof(value) == 'string' then
+			return value == LocalPlayer.Name or value == LocalPlayer.DisplayName or value == tostring(LocalPlayer.UserId)
+		end
+
+		if typeof(value) == 'number' then
+			return value == LocalPlayer.UserId
+		end
+
+		return false
+	end
+
 	local function getHitboxExpansion()
 		local lib = vape and vape.Libraries and vape.Libraries.universal
 		return lib and lib.HitboxExpansion
@@ -1951,6 +1989,10 @@ run(function()
 	end
 
 	local function performHeader()
+		if not canHeaderFromLastKicked() then
+			return
+		end
+
 		local character = LocalPlayer.Character
 		if not character then return end
 
@@ -1982,6 +2024,13 @@ run(function()
 		renderConnection = RunService.RenderStepped:Connect(function()
 			if hitSent then return end
 			if not AutoHeader.Enabled then
+				if renderConnection then
+					renderConnection:Disconnect()
+				end
+				return
+			end
+
+			if not canHeaderFromLastKicked() then
 				if renderConnection then
 					renderConnection:Disconnect()
 				end
@@ -2032,6 +2081,10 @@ run(function()
 	end
 
 	local function autoHeaderSequence()
+		if not canHeaderFromLastKicked() then
+			return
+		end
+
 		local character = LocalPlayer.Character
 		if not character then return end
 
@@ -2110,6 +2163,7 @@ run(function()
 			local rootPart = character:FindFirstChild('HumanoidRootPart')
 			if not rootPart then return end
 			if not LocalPlayer:FindFirstChild('InPlay') then return end
+			if not canHeaderFromLastKicked() then return end
 			if not ball or not ball:IsDescendantOf(Workspace) then return end
 
 			local points = simulateTrajectory(ball.Position, ball.AssemblyLinearVelocity, getExternalAcceleration(ball))
@@ -2158,7 +2212,6 @@ run(function()
 		cleanConnections()
 	end)
 end)
-
 		
 run(function()
 	local RunService = game:GetService("RunService")
