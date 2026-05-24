@@ -40,15 +40,10 @@ end
 local playersService = cloneref(game:GetService('Players'))
 
 local supportedPlaceIds = {
-	[11156779721] = true,
-	[11630038968] = true,
-	[12011959048] = true,
 	[123804558118054] = true,
 	[131465939650733] = true,
 	[13246639586] = true,
 	[139566161526375] = true,
-	[14191889582] = true,
-	[14662411059] = true,
 	[16483433878] = true,
 	[18935841239] = true,
 	[18972674759] = true,
@@ -57,7 +52,6 @@ local supportedPlaceIds = {
 	[6872265039] = true,
 	[6872274481] = true,
 	[77790193039862] = true,
-	[79695841807485] = true,
 	[80041634734121] = true,
 	[83413351472244] = true,
 	[8444591321] = true,
@@ -67,7 +61,15 @@ local supportedPlaceIds = {
 	[8592115909] = true,
 	[8768229691] = true,
 	[893973440] = true,
-	[8951451142] = true
+	[8951451142] = true,
+
+	-- ids from your screenshot
+	[11156779721] = true,
+	[11630038968] = true,
+	[12011959048] = true,
+	[14191889582] = true,
+	[14662411059] = true,
+	[79695841807485] = true
 }
 
 local function downloadFile(path, func)
@@ -112,139 +114,55 @@ local function fetchGameFile(path)
 	return false
 end
 
-local function createBlankOption(default)
-	local option = {
-		Enabled = default == true,
-		Value = default,
-		ListEnabled = {},
-		Object = {Visible = false}
-	}
+local function snapshotModules()
+	local modules = {}
 
-	function option:Toggle()
-		self.Enabled = not self.Enabled
-	end
-
-	function option:SetValue(value)
-		self.Value = value
-	end
-
-	function option:Save() end
-	function option:Load() end
-	function option:Color() end
-	function option:Clean() end
-
-	return option
-end
-
-local function createBlankModule(name)
-	local module = {
-		Name = name or 'UniversalDummy',
-		Enabled = false,
-		Options = {},
-		ListEnabled = {},
-		Object = {Visible = false}
-	}
-
-	function module:Toggle()
-		self.Enabled = not self.Enabled
-	end
-
-	function module:Clean() end
-
-	function module:CreateToggle(settings)
-		local option = createBlankOption(settings and settings.Default or false)
-		self.Options[(settings and settings.Name) or 'Toggle'] = option
-		return option
-	end
-
-	function module:CreateSlider(settings)
-		local option = createBlankOption(settings and (settings.Default or settings.Min) or 0)
-		self.Options[(settings and settings.Name) or 'Slider'] = option
-		return option
-	end
-
-	function module:CreateTwoSlider(settings)
-		local option = createBlankOption(settings and (settings.Default or settings.DefaultMin) or 0)
-
-		function option:GetRandomValue()
-			return self.Value or 1
+	if vape and vape.Modules then
+		for name, module in vape.Modules do
+			modules[name] = module
 		end
-
-		self.Options[(settings and settings.Name) or 'TwoSlider'] = option
-		return option
 	end
 
-	function module:CreateDropdown(settings)
-		local list = settings and settings.List or {}
-		local option = createBlankOption(list[1] or 'None')
-		self.Options[(settings and settings.Name) or 'Dropdown'] = option
-		return option
-	end
-
-	function module:CreateColorSlider(settings)
-		local option = createBlankOption(0)
-		option.Hue = settings and settings.DefaultHue or 0.44
-		option.Sat = settings and settings.DefaultSat or 1
-		option.Value = settings and settings.DefaultValue or 1
-		option.Opacity = settings and settings.DefaultOpacity or 1
-		self.Options[(settings and settings.Name) or 'Color'] = option
-		return option
-	end
-
-	function module:CreateTextbox(settings)
-		local option = createBlankOption(settings and settings.Default or '')
-		self.Options[(settings and settings.Name) or 'Textbox'] = option
-		return option
-	end
-
-	function module:CreateTextBox(settings)
-		return self:CreateTextbox(settings)
-	end
-
-	function module:CreateButton(settings)
-		local option = createBlankOption(false)
-		self.Options[(settings and settings.Name) or 'Button'] = option
-		return option
-	end
-
-	function module:CreateTargets(settings)
-		local option = createBlankOption(false)
-		option.Players = createBlankOption(settings and settings.Players)
-		option.NPCs = createBlankOption(settings and settings.NPCs)
-		option.Walls = createBlankOption(settings and settings.Walls)
-		option.Invisible = createBlankOption(settings and settings.Invisible)
-		self.Options.Targets = option
-		return option
-	end
-
-	return module
+	return modules
 end
 
-local function silenceUniversalModules(callback)
-	local originals = {}
+local function getCreatedModules(before)
+	local modules = {}
 
-	if not (vape and vape.Categories) then
-		return callback()
-	end
-
-	for _, category in vape.Categories do
-		if type(category) == 'table' and type(category.CreateModule) == 'function' then
-			originals[category] = category.CreateModule
-
-			category.CreateModule = function(_, settings)
-				return createBlankModule(settings and settings.Name)
+	if vape and vape.Modules then
+		for name, module in vape.Modules do
+			if before[name] == nil then
+				modules[name] = module
 			end
 		end
 	end
 
-	local suc, err = pcall(callback)
+	return modules
+end
 
-	for category, original in originals do
-		category.CreateModule = original
+local function removeUniversalModules(modules)
+	if not (vape and vape.Modules) then
+		return
 	end
 
-	if not suc then
-		error(err)
+	for name, module in modules do
+		pcall(function()
+			if vape.Modules[name] == module then
+				if module.Toggle and module.Enabled then
+					module:Toggle()
+				end
+
+				if module.Clean then
+					module:Clean()
+				end
+
+				if vape.Remove then
+					vape:Remove(name)
+				else
+					vape.Modules[name] = nil
+				end
+			end
+		end)
 	end
 end
 
@@ -314,14 +232,13 @@ if not shared.VapeIndependent then
 	local supportedGame = supportedPlaceIds[game.PlaceId] == true
 	local hasGameFile = supportedGame and fetchGameFile(gameFile)
 
-	if supportedGame and hasGameFile then
-		silenceUniversalModules(function()
-			loadstring(downloadFile('newvape/games/universal.lua'), 'universal')()
-		end)
+	local beforeUniversal = snapshotModules()
+	loadstring(downloadFile('newvape/games/universal.lua'), 'universal')()
+	local universalModules = getCreatedModules(beforeUniversal)
 
+	if supportedGame and hasGameFile then
 		loadstring(readfile(gameFile), tostring(game.PlaceId))(...)
-	else
-		loadstring(downloadFile('newvape/games/universal.lua'), 'universal')()
+		removeUniversalModules(universalModules)
 	end
 
 	finishLoading()
