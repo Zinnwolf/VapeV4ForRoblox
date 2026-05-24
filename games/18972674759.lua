@@ -2136,7 +2136,7 @@ run(function()
 				triggerCooldown = false
 			end
 		end,
-		Tooltip = 'Headers only when someone else last touched the ball.'
+		Tooltip = 'Headers for you.'
 	})
 
 	Chance = AutoHeader:CreateSlider({
