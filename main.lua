@@ -22,39 +22,51 @@ local loadstring = function(...)
 	end
 	return res
 end
+
 local queue_on_teleport = queue_on_teleport or function() end
+
 local isfile = isfile or function(file)
 	local suc, res = pcall(function()
 		return readfile(file)
 	end)
+
 	return suc and res ~= nil and res ~= ''
 end
+
 local cloneref = cloneref or function(obj)
 	return obj
 end
+
 local playersService = cloneref(game:GetService('Players'))
 
-local silentUniversalPlaceIds = {
+local supportedPlaceIds = {
 	[11156779721] = true,
 	[11630038968] = true,
 	[12011959048] = true,
 	[123804558118054] = true,
 	[131465939650733] = true,
 	[13246639586] = true,
+	[139566161526375] = true,
 	[14191889582] = true,
 	[14662411059] = true,
+	[16483433878] = true,
 	[18935841239] = true,
 	[18972674759] = true,
 	[5938036553] = true,
+	[606849621] = true,
 	[6872265039] = true,
 	[6872274481] = true,
+	[77790193039862] = true,
 	[79695841807485] = true,
+	[80041634734121] = true,
+	[83413351472244] = true,
 	[8444591321] = true,
 	[8542259458] = true,
 	[8542275097] = true,
 	[8560631822] = true,
 	[8592115909] = true,
 	[8768229691] = true,
+	[893973440] = true,
 	[8951451142] = true
 }
 
@@ -63,14 +75,18 @@ local function downloadFile(path, func)
 		local suc, res = pcall(function()
 			return game:HttpGet('https://raw.githubusercontent.com/Zinnwolf/VapeV4ForRoblox/'..readfile('newvape/profiles/commit.txt')..'/'..select(1, path:gsub('newvape/', '')), true)
 		end)
+
 		if not suc or res == '404: Not Found' then
 			error(res)
 		end
+
 		if path:find('.lua') then
 			res = '--This watermark is used to delete the file if its cached, remove it to make the file persist after vape updates.\n'..res
 		end
+
 		writefile(path, res)
 	end
+
 	return (func or readfile)(path)
 end
 
@@ -149,9 +165,11 @@ local function createBlankModule(name)
 
 	function module:CreateTwoSlider(settings)
 		local option = createBlankOption(settings and (settings.Default or settings.DefaultMin) or 0)
+
 		function option:GetRandomValue()
 			return self.Value or 1
 		end
+
 		self.Options[(settings and settings.Name) or 'TwoSlider'] = option
 		return option
 	end
@@ -212,6 +230,7 @@ local function silenceUniversalModules(callback)
 	for _, category in vape.Categories do
 		if type(category) == 'table' and type(category.CreateModule) == 'function' then
 			originals[category] = category.CreateModule
+
 			category.CreateModule = function(_, settings)
 				return createBlankModule(settings and settings.Name)
 			end
@@ -232,6 +251,7 @@ end
 local function finishLoading()
 	vape.Init = nil
 	vape:Load()
+
 	task.spawn(function()
 		repeat
 			vape:Save()
@@ -240,9 +260,11 @@ local function finishLoading()
 	end)
 
 	local teleportedServers
+
 	vape:Clean(playersService.LocalPlayer.OnTeleport:Connect(function()
 		if (not teleportedServers) and (not shared.VapeIndependent) then
 			teleportedServers = true
+
 			local teleportScript = [[
 				shared.vapereload = true
 				if shared.VapeDeveloper then
@@ -251,12 +273,15 @@ local function finishLoading()
 					loadstring(game:HttpGet('https://raw.githubusercontent.com/Zinnwolf/VapeV4ForRoblox/'..readfile('newvape/profiles/commit.txt')..'/loader.lua', true), 'loader')()
 				end
 			]]
+
 			if shared.VapeDeveloper then
 				teleportScript = 'shared.VapeDeveloper = true\n'..teleportScript
 			end
+
 			if shared.VapeCustomProfile then
 				teleportScript = 'shared.VapeCustomProfile = "'..shared.VapeCustomProfile..'"\n'..teleportScript
 			end
+
 			vape:Save()
 			queue_on_teleport(teleportScript)
 		end
@@ -264,6 +289,7 @@ local function finishLoading()
 
 	if not shared.vapereload then
 		if not vape.Categories then return end
+
 		if vape.Categories.Main.Options['GUI bind indicator'].Enabled then
 			vape:CreateNotification('Finished Loading', vape.VapeButton and 'Press the button in the top right to open GUI' or 'Press '..table.concat(vape.Keybind, ' + '):upper()..' to open GUI', 5)
 		end
@@ -273,29 +299,29 @@ end
 if not isfile('newvape/profiles/gui.txt') then
 	writefile('newvape/profiles/gui.txt', 'new')
 end
+
 local gui = readfile('newvape/profiles/gui.txt')
 
 if not isfolder('newvape/assets/'..gui) then
 	makefolder('newvape/assets/'..gui)
 end
+
 vape = loadstring(downloadFile('newvape/guis/'..gui..'.lua'), 'gui')()
 shared.vape = vape
 
 if not shared.VapeIndependent then
 	local gameFile = 'newvape/games/'..game.PlaceId..'.lua'
-	local hasGameFile = fetchGameFile(gameFile)
-	local silentUniversal = silentUniversalPlaceIds[game.PlaceId] == true
+	local supportedGame = supportedPlaceIds[game.PlaceId] == true
+	local hasGameFile = supportedGame and fetchGameFile(gameFile)
 
-	if silentUniversal then
+	if supportedGame and hasGameFile then
 		silenceUniversalModules(function()
 			loadstring(downloadFile('newvape/games/universal.lua'), 'universal')()
 		end)
+
+		loadstring(readfile(gameFile), tostring(game.PlaceId))(...)
 	else
 		loadstring(downloadFile('newvape/games/universal.lua'), 'universal')()
-	end
-
-	if hasGameFile then
-		loadstring(readfile(gameFile), tostring(game.PlaceId))(...)
 	end
 
 	finishLoading()
