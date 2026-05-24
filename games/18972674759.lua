@@ -1846,6 +1846,7 @@ run(function()
 		table.clear(connections)
 	end
 
+	-- Fixed: now correctly handles ObjectValue instances named after the player
 	local function canHeaderFromLastKicked()
 		local ballStatus = Workspace:FindFirstChild('ballStatus')
 		local lastKicked = ballStatus and ballStatus:FindFirstChild('lastKicked')
@@ -1864,13 +1865,22 @@ run(function()
 		end
 
 		if typeof(value) == 'Instance' then
+			-- Check if it's a Player directly
 			if value:IsA('Player') then
 				return value == LocalPlayer
 			end
 
+			-- Check if the instance belongs to the character
 			if LocalPlayer.Character and value:IsDescendantOf(LocalPlayer.Character) then
 				return true
 			end
+
+			-- Critical fix: many games store an ObjectValue to a part/model named after the player
+			if value.Name == LocalPlayer.Name or value.Name == LocalPlayer.DisplayName then
+				return true
+			end
+
+			return false
 		end
 
 		if typeof(value) == 'string' then
@@ -2164,6 +2174,7 @@ run(function()
 			if not rootPart then return end
 			if not LocalPlayer:FindFirstChild('InPlay') then return end
 
+			-- guard: do nothing if we aren't the last kicker
 			if not canHeaderFromLastKicked() then return end
 
 			if not ball or not ball:IsDescendantOf(Workspace) then return end
