@@ -1,8 +1,3 @@
-local supportedPlaceId = 18972674759
-if game.PlaceId ~= supportedPlaceId then
-	return
-end
-
 local oldloadstring = loadstring
 local vape
 
@@ -24,7 +19,7 @@ end
 local function downloadFile(path, func)
 	if not isfile(path) then
 		local suc, res = pcall(function()
-			return game:HttpGet('https://raw.githubusercontent.com/Trxiste/VapeV4ForRoblox/main/'..select(1, path:gsub('newvape/', '')), true)
+			return game:HttpGet('https://raw.githubusercontent.com/Zinnwolf/VapeV4ForRoblox/main/'..select(1, path:gsub('newvape/', '')), true)
 		end)
 		if not suc or res == '404: Not Found' then
 			error(res)
@@ -135,13 +130,6 @@ universal.Services.CollectionService = collectionService
 universal.Services.Debris = debrisService
 universal.Services.CoreGui = coreGui
 universal.Services.Workspace = workspace
-
-universal.PlaceSupport = {
-	Name = '7v7',
-	PlaceId = supportedPlaceId,
-	SinglePlaceFile = true
-}
-
 
 local function removeTags(str)
 	str = tostring(str or '')
@@ -3093,7 +3081,7 @@ run(function()
 	}
 
 	local function profile()
-		return profiles[18972674759]
+		return profiles[game.PlaceId] or profiles[18972674759]
 	end
 
 	local function positions()
@@ -7548,7 +7536,7 @@ local ghostRemoteName = '1e9b61ba3c5f4c768c34890927c91467'
 local blurToken = 0
 
 local function getcategory()
-	return vape.Categories.InstantActions or vape.Categories['Instant actions'] or vape.Categories.Utility
+	return vape.Categories.InstantActions or vape.Categories['Instant actions'] or vape.Categories['Instant Actions'] or vape.Categories.Minigames or vape.Categories.Utility
 end
 
 local function getkey(keyname)
