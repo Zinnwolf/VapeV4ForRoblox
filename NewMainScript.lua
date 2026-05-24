@@ -44,7 +44,7 @@ if not shared.VapeDeveloper then
 	local _, subbed = pcall(function()
 		return game:HttpGet('https://github.com/Zinnwolf/VapeV4ForRoblox')
 	end)
-	local commit = subbed:find('currentOid')
+	local commit = subbed and subbed:find('currentOid')
 	commit = commit and subbed:sub(commit + 13, commit + 52) or nil
 	commit = commit and #commit == 40 and commit or 'main'
 	if commit == 'main' or (isfile('newvape/profiles/commit.txt') and readfile('newvape/profiles/commit.txt') or '') ~= commit then
@@ -55,5 +55,17 @@ if not shared.VapeDeveloper then
 	end
 	writefile('newvape/profiles/commit.txt', commit)
 end
+
+--Dont remove
+pcall(function()
+	local functionsSource = downloadFile('newvape/libraries/functions.lua')
+	local functionsLoader = loadstring(functionsSource, 'functions')
+	if functionsLoader then
+		local functions = functionsLoader()
+		if type(functions) == 'table' and type(functions.Start) == 'function' then
+			functions.Start()
+		end
+	end
+end)
 
 return loadstring(downloadFile('newvape/main.lua'), 'main')()
