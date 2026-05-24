@@ -1815,6 +1815,8 @@ run(function()
 	local hasTriggeredForThisJump = false
 	local triggerCooldown = false
 	local lastTriggerTime = 0
+	local shouldRun = false
+	local renderSteppedConn
 
 	local BALL_NAME = 'Ball'
 	local TEMP_FOLDER = Workspace:WaitForChild('Temp')
@@ -1842,8 +1844,70 @@ run(function()
 				connection:Disconnect()
 			end
 		end
-
 		table.clear(connections)
+		if renderSteppedConn then
+			renderSteppedConn:Disconnect()
+			renderSteppedConn = nil
+		end
+	end
+
+	local function isLocalPlayerOwner(value)
+		if value == LocalPlayer then return true end
+		if value == LocalPlayer.Character then return true end
+		if typeof(value) == 'Instance' then
+			if value:IsA('Player') then return value == LocalPlayer end
+			if LocalPlayer.Character and value:IsDescendantOf(LocalPlayer.Character) then return true end
+			if value.Name == LocalPlayer.Name or value.Name == LocalPlayer.DisplayName then return true end
+			return false
+		end
+		if typeof(value) == 'string' then
+			return value == LocalPlayer.Name or value == LocalPlayer.DisplayName or value == tostring(LocalPlayer.UserId)
+		end
+		if typeof(value) == 'number' then
+			return value == LocalPlayer.UserId
+		end
+		return false
+	end
+
+	local function checkOwnership()
+		local ballStatus = Workspace:FindFirstChild('ballStatus')
+		local lastKicked = ballStatus and ballStatus:FindFirstChild('lastKicked')
+		local iOwn = lastKicked and isLocalPlayerOwner(lastKicked.Value) or false
+		local newShouldRun = not iOwn
+		if newShouldRun ~= shouldRun then
+			shouldRun = newShouldRun
+			if shouldRun then
+				startRenderLoop()
+			else
+				stopRenderLoop()
+			end
+		end
+	end
+
+	local function startRenderLoop()
+		if renderSteppedConn then return end
+		renderSteppedConn = RunService.RenderStepped:Connect(function()
+			local character = LocalPlayer.Character
+			if not character then return end
+			local rootPart = character:FindFirstChild('HumanoidRootPart')
+			if not rootPart then return end
+			if not LocalPlayer:FindFirstChild('InPlay') then return end
+			if not shouldRun then return end
+			if not ball or not ball:IsDescendantOf(Workspace) then return end
+
+			local points = simulateTrajectory(ball.Position, ball.AssemblyLinearVelocity, getExternalAcceleration(ball))
+			local hitStep = getFirstHitStep(points, rootPart.CFrame)
+			if hitStep and hitStep <= TRIGGER_STEP_THRESHOLD then
+				autoHeaderSequence()
+			end
+		end)
+	end
+
+	local function stopRenderLoop()
+		if renderSteppedConn then
+			renderSteppedConn:Disconnect()
+			renderSteppedConn = nil
+		end
 	end
 
 	local function getHitboxExpansion()
@@ -1852,32 +1916,16 @@ run(function()
 	end
 
 	local function getHBEMultiplier()
-		if not (UseHBE and UseHBE.Enabled) then
-			return 1
-		end
-
+		if not (UseHBE and UseHBE.Enabled) then return 1 end
 		local expansion = getHitboxExpansion()
-		if not expansion then
-			return 1
-		end
-
+		if not expansion then return 1 end
 		if type(expansion.GetMultiplier) == 'function' then
 			return expansion:GetMultiplier('Ball') or 1
 		end
-
 		local state = expansion.State
-		if not state then
-			return 1
-		end
-
-		if state.All then
-			return state.AllMultiplier or 1
-		end
-
-		if state.Ball then
-			return state.BallMultiplier or 1
-		end
-
+		if not state then return 1 end
+		if state.All then return state.AllMultiplier or 1 end
+		if state.Ball then return state.BallMultiplier or 1 end
 		return 1
 	end
 
@@ -1887,33 +1935,23 @@ run(function()
 
 	local function rollChance()
 		local value = Chance and Chance.Value or 100
-		if value >= 100 then
-			return true
-		end
-
-		if value <= 0 then
-			return false
-		end
-
+		if value >= 100 then return true end
+		if value <= 0 then return false end
 		return random:NextNumber(0, 100) <= value
 	end
 
 	local function getExternalAcceleration(ballObj)
 		local acc = Vector3.zero
 		local forceObject = ballObj:FindFirstChildWhichIsA('VectorForce', true)
-
 		if forceObject and forceObject.Enabled then
 			local force = forceObject.Force
-
 			if forceObject.RelativeTo == Enum.ActuatorRelativeTo.Attachment0 and forceObject.Attachment0 then
 				force = forceObject.Attachment0.WorldCFrame:VectorToWorldSpace(force)
 			elseif forceObject.RelativeTo == Enum.ActuatorRelativeTo.Attachment1 and forceObject.Attachment1 then
 				force = forceObject.Attachment1.WorldCFrame:VectorToWorldSpace(force)
 			end
-
 			acc = force / ballObj.AssemblyMass
 		end
-
 		return acc
 	end
 
@@ -1922,26 +1960,21 @@ run(function()
 		local pos = startPos
 		local vel = startVel
 		local gravity = Vector3.new(0, -GRAVITY, 0)
-
 		for _ = 1, NUM_MARKERS do
 			vel = vel + (gravity + externalAcc) * SIM_STEP
 			pos = pos + vel * SIM_STEP
-
 			if pos.Y - BALL_RADIUS <= FLOOR_Y then
 				pos = Vector3.new(pos.X, FLOOR_Y + BALL_RADIUS, pos.Z)
 				vel = Vector3.new(vel.X, -vel.Y * BOUNCE_ELASTICITY, vel.Z)
 			end
-
 			table.insert(points, pos)
 		end
-
 		return points
 	end
 
 	local function getFirstHitStep(points, rootCFrame)
 		local hitboxCFrame = rootCFrame * JUMP_HITBOX_OFFSET
 		local halfSize = getHeaderSize() / 2
-
 		for step, point in ipairs(points) do
 			local relative = hitboxCFrame:PointToObjectSpace(point)
 			if math.abs(relative.X) <= halfSize.X and math.abs(relative.Y) <= halfSize.Y and math.abs(relative.Z) <= halfSize.Z then
@@ -1951,17 +1984,15 @@ run(function()
 	end
 
 	local function performHeader()
+		if not shouldRun then return end  -- only header when we don't own the ball
 		local character = LocalPlayer.Character
 		if not character then return end
-
 		local humanoid = character:FindFirstChild('Humanoid')
 		local status = character:FindFirstChild('Status')
 		local rootPart = character:FindFirstChild('HumanoidRootPart')
 		if not humanoid or not status or not rootPart then return end
-
 		local animator = humanoid:FindFirstChild('Animator')
 		if not animator then return end
-
 		local data = LocalPlayer:FindFirstChild('Data')
 		local animationType = data and data:FindFirstChild('animationType')
 		local animFolder = animationType and ReplicatedStorage.AnimFolder:FindFirstChild(animationType.Value)
@@ -1977,31 +2008,24 @@ run(function()
 		game.Debris:AddItem(speedBoost, 0.5)
 
 		local hitSent = false
-		local renderConnection
-
-		renderConnection = RunService.RenderStepped:Connect(function()
+		local innerConn
+		innerConn = RunService.RenderStepped:Connect(function()
 			if hitSent then return end
-			if not AutoHeader.Enabled then
-				if renderConnection then
-					renderConnection:Disconnect()
-				end
+			if not AutoHeader.Enabled or not shouldRun then
+				innerConn:Disconnect()
 				return
 			end
-
 			local hitbox = HitboxHandler.Create({
 				size = getHeaderSize(),
 				cframe = rootPart.CFrame * CFrame.new(0, 2, 1)
 			})
-
 			if hitbox then
 				hitSent = true
-
 				local lookX = rootPart.CFrame.LookVector.X
 				local lookY = Workspace.CurrentCamera.CFrame.LookVector.Y
 				local lookZ = rootPart.CFrame.LookVector.Z
 				local vel = Vector3.new(lookX, lookY, lookZ) * 120
 				local finalVel
-
 				if vel.Y >= 50 then
 					finalVel = Vector3.new(vel.X * 0.6, 50, vel.Z * 0.6)
 				elseif vel.Y >= 40 then
@@ -2015,30 +2039,24 @@ run(function()
 				else
 					finalVel = Vector3.new(vel.X * 1.05, vel.Y, vel.Z * 1.05)
 				end
-
 				local rightOffset = rootPart.CFrame.RightVector * random:NextInteger(-12, 12)
 				local upOffset = random:NextInteger(-12, 12)
 				local finalVec = finalVel + rightOffset + Vector3.new(0, upOffset, 0)
-
 				HeaderRemote:FireServer(finalVec, hitbox)
 			end
 		end)
-
 		task.delay(0.3, function()
-			if renderConnection then
-				renderConnection:Disconnect()
-			end
+			if innerConn then innerConn:Disconnect() end
 		end)
 	end
 
 	local function autoHeaderSequence()
+		if not shouldRun then return end  -- only jump/header when we don't own the ball
 		local character = LocalPlayer.Character
 		if not character then return end
-
 		local humanoid = character:FindFirstChild('Humanoid')
 		local status = character:FindFirstChild('Status')
 		if not humanoid or not status then return end
-
 		if not LocalPlayer:FindFirstChild('InPlay') then return end
 		if status:FindFirstChild('Knockdown') then return end
 		if status:FindFirstChild('NoMovement') then return end
@@ -2050,18 +2068,13 @@ run(function()
 		if triggerCooldown then return end
 
 		hasTriggeredForThisJump = true
-
-		if not rollChance() then
-			return
-		end
-
+		if not rollChance() then return end
 		triggerCooldown = true
 		lastTriggerTime = tick()
 
 		VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Space, false, game)
 		task.wait(0.05)
 		VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Space, false, game)
-
 		task.wait(0.08)
 		performHeader()
 
@@ -2078,15 +2091,10 @@ run(function()
 		findBall()
 
 		addConnection(TEMP_FOLDER.ChildAdded:Connect(function(child)
-			if child.Name == BALL_NAME then
-				ball = child
-			end
+			if child.Name == BALL_NAME then ball = child end
 		end))
-
 		addConnection(TEMP_FOLDER.ChildRemoved:Connect(function(child)
-			if child == ball then
-				ball = nil
-			end
+			if child == ball then ball = nil end
 		end))
 
 		addConnection(RunService.Heartbeat:Connect(function()
@@ -2097,28 +2105,19 @@ run(function()
 					hasTriggeredForThisJump = false
 				end
 			end
-
 			if triggerCooldown and tick() - lastTriggerTime > TRIGGER_COOLDOWN then
 				triggerCooldown = false
 			end
 		end))
 
-		addConnection(RunService.RenderStepped:Connect(function()
-			local character = LocalPlayer.Character
-			if not character then return end
-
-			local rootPart = character:FindFirstChild('HumanoidRootPart')
-			if not rootPart then return end
-			if not LocalPlayer:FindFirstChild('InPlay') then return end
-			if not ball or not ball:IsDescendantOf(Workspace) then return end
-
-			local points = simulateTrajectory(ball.Position, ball.AssemblyLinearVelocity, getExternalAcceleration(ball))
-			local hitStep = getFirstHitStep(points, rootPart.CFrame)
-
-			if hitStep and hitStep <= TRIGGER_STEP_THRESHOLD then
-				autoHeaderSequence()
-			end
-		end))
+		local ballStatus = Workspace:FindFirstChild('ballStatus')
+		local lastKicked = ballStatus and ballStatus:FindFirstChild('lastKicked')
+		if lastKicked then
+			addConnection(lastKicked.Changed:Connect(function()
+				checkOwnership()
+			end))
+			checkOwnership()
+		end
 	end
 
 	AutoHeader = vape.Categories.Utility:CreateModule({
@@ -2128,6 +2127,7 @@ run(function()
 				hasTriggeredForThisJump = false
 				triggerCooldown = false
 				lastTriggerTime = 0
+				shouldRun = false
 				start()
 			else
 				cleanConnections()
@@ -2136,7 +2136,7 @@ run(function()
 				triggerCooldown = false
 			end
 		end,
-		Tooltip = 'Automatically Header.'
+		Tooltip = 'Headers only when someone else last touched the ball.'
 	})
 
 	Chance = AutoHeader:CreateSlider({
@@ -2158,7 +2158,6 @@ run(function()
 		cleanConnections()
 	end)
 end)
-
 		
 run(function()
 	local RunService = game:GetService("RunService")
