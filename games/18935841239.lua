@@ -2121,7 +2121,7 @@ run(function()
 	end
 
 	AutoHeader = vape.Categories.Utility:CreateModule({
-		Name = 'AutoHeader',
+		Name = 'Headers for you',
 		Function = function(callback)
 			if callback then
 				hasTriggeredForThisJump = false
