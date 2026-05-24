@@ -50,6 +50,69 @@ local function downloadFile(path, func)
 	return (func or readfile)(path)
 end
 
+local function snapshotModules()
+	local modules = {}
+	if vape and vape.Modules then
+		for name, module in vape.Modules do
+			modules[name] = module
+		end
+	end
+	return modules
+end
+
+local function getNewModules(before)
+	local names = {}
+	if vape and vape.Modules then
+		for name in vape.Modules do
+			if before[name] == nil then
+				table.insert(names, name)
+			end
+		end
+	end
+	return names
+end
+
+local function removeModules(names)
+	for _, name in names do
+		pcall(function()
+			if vape and vape.Remove then
+				vape:Remove(name)
+			elseif vape and vape.Modules and vape.Modules[name] then
+				local module = vape.Modules[name]
+				if module.Toggle and module.Enabled then
+					module:Toggle()
+				end
+				if module.Clean then
+					module:Clean()
+				end
+				vape.Modules[name] = nil
+			end
+		end)
+	end
+end
+
+local function fetchGameFile(path)
+	if isfile(path) then
+		return true
+	end
+
+	if shared.VapeDeveloper then
+		return false
+	end
+
+	local suc, res = pcall(function()
+		return game:HttpGet('https://raw.githubusercontent.com/Zinnwolf/VapeV4ForRoblox/'..readfile('newvape/profiles/commit.txt')..'/games/'..game.PlaceId..'.lua', true)
+	end)
+
+	if suc and res ~= '404: Not Found' then
+		res = '--This watermark is used to delete the file if its cached, remove it to make the file persist after vape updates.\n'..res
+		writefile(path, res)
+		return true
+	end
+
+	return false
+end
+
 local function finishLoading()
 	vape.Init = nil
 	vape:Load()
@@ -103,19 +166,16 @@ vape = loadstring(downloadFile('newvape/guis/'..gui..'.lua'), 'gui')()
 shared.vape = vape
 
 if not shared.VapeIndependent then
-	loadstring(downloadFile('newvape/games/universal.lua'), 'universal')()
+	local gameFile = 'newvape/games/'..game.PlaceId..'.lua'
+	local hasGameFile = fetchGameFile(gameFile)
 
-	if isfile('newvape/games/'..game.PlaceId..'.lua') then
-		loadstring(readfile('newvape/games/'..game.PlaceId..'.lua'), tostring(game.PlaceId))(...)
-	else
-		if not shared.VapeDeveloper then
-			local suc, res = pcall(function()
-				return game:HttpGet('https://raw.githubusercontent.com/Zinnwolf/VapeV4ForRoblox/'..readfile('newvape/profiles/commit.txt')..'/games/'..game.PlaceId..'.lua', true)
-			end)
-			if suc and res ~= '404: Not Found' then
-				loadstring(downloadFile('newvape/games/'..game.PlaceId..'.lua'), tostring(game.PlaceId))(...)
-			end
-		end
+	local beforeUniversal = snapshotModules()
+	loadstring(downloadFile('newvape/games/universal.lua'), 'universal')()
+	local universalModules = getNewModules(beforeUniversal)
+
+	if hasGameFile then
+		removeModules(universalModules)
+		loadstring(readfile(gameFile), tostring(game.PlaceId))(...)
 	end
 
 	finishLoading()
