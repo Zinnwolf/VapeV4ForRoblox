@@ -91,6 +91,7 @@ local getcustomassets = {
 	['newvape/assets/new/guivape.png'] = 'rbxassetid://14657521312',
 	['newvape/assets/new/info.png'] = 'rbxassetid://14368324807',
 	['newvape/assets/new/inventoryicon.png'] = 'rbxassetid://14928011633',
+	['newvape/assets/new/instants.png'] = '',
 	['newvape/assets/new/legit.png'] = 'rbxassetid://14425650534',
 	['newvape/assets/new/legittab.png'] = 'rbxassetid://14426740825',
 	['newvape/assets/new/miniicon.png'] = 'rbxassetid://14368326029',
@@ -5797,6 +5798,11 @@ mainapi:CreateCategory({
 	Icon = getcustomasset('newvape/assets/new/miniicon.png'),
 	Size = UDim2.fromOffset(19, 12)
 })
+mainapi:CreateCategory({
+	Name = 'Instant Actions',
+	Icon = getcustomasset('newvape/assets/new/instants.png'),
+	Size = UDim2.fromOffset(13, 16)
+})
 mainapi.Categories.Main:CreateDivider('misc')
 
 --[[
@@ -6086,8 +6092,9 @@ guipane:CreateButton({
 			WorldCategory = 6,
 			InventoryCategory = 7,
 			MinigamesCategory = 8,
-			FriendsCategory = 9,
-			ProfilesCategory = 10
+			['Instant ActionsCategory'] = 9,
+			FriendsCategory = 10,
+			ProfilesCategory = 11
 		}
 		local categories = {}
 		for _, v in mainapi.Categories do
