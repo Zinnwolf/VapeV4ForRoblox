@@ -31,8 +31,6 @@ local gameCamera = workspace.CurrentCamera
 local lplr = playersService.LocalPlayer
 local assetfunction = getcustomasset
 
-lplr:Kick('Bedwars is no longer supported by Vape V4, thank you for 5 years of support ❤️')
-
 local vape = shared.vape
 local entitylib = vape.Libraries.entity
 local targetinfo = vape.Libraries.targetinfo
