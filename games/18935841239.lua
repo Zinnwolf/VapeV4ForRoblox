@@ -10689,7 +10689,307 @@ run(function()
 		end
 	})
 end)																																		
-																
+
+local isfile = isfile or function(file)
+	local suc, res = pcall(function() return readfile(file) end)
+	return suc and res ~= nil and res ~= ''
+end
+
+local delfile = delfile or function(file)
+	writefile(file, '')
+end
+
+local function downloadFile(path, func)
+	if not isfile(path) then
+		local suc, res = pcall(function()
+			return game:HttpGet('https://raw.githubusercontent.com/Noveign/VapeV4ForRoblox/' .. readfile('newvape/profiles/commit.txt') .. '/' .. select(1, path:gsub('newvape/', '')), true)
+		end)
+		if not suc or res == '404: Not Found' then error(res) end
+		if path:find('%.lua') then
+			res = '--This watermark is used to delete the file if its cached, remove it to make the file persist after vape updates.\n' .. res
+		end
+		writefile(path, res)
+	end
+	return (func or readfile)(path)
+end
+
+local function wipeFolder(path)
+	if not isfolder(path) then return end
+	for _, file in listfiles(path) do
+		if file:find('loader') then continue end
+		if isfile(file) and select(1, readfile(file):find('--This watermark is used to delete the file if its cached, remove it to make the file persist after vape updates.')) == 1 then
+			delfile(file)
+		end
+	end
+end
+
+for _, folder in {'newvape', 'newvape/games', 'newvape/profiles', 'newvape/assets', 'newvape/libraries', 'newvape/guis'} do
+	if not isfolder(folder) then makefolder(folder) end
+end
+
+if not shared.VapeDeveloper then
+	local _, subbed = pcall(function()
+		return game:HttpGet('https://github.com/Noveign/VapeV4ForRoblox')
+	end)
+	local commit = subbed:find('currentOid')
+	commit = commit and subbed:sub(commit + 13, commit + 52) or nil
+	commit = commit and #commit == 40 and commit or 'main'
+	if commit == 'main' or (isfile('newvape/profiles/commit.txt') and readfile('newvape/profiles/commit.txt') or '') ~= commit then
+		wipeFolder('newvape')
+		wipeFolder('newvape/games')
+		wipeFolder('newvape/guis')
+		wipeFolder('newvape/libraries')
+	end
+	writefile('newvape/profiles/commit.txt', commit)
+end
+
+local loadstring = function(...)
+	local res, err = loadstring(...)
+	if err and vape then
+		vape:CreateNotification('Vape', 'Failed to load : '..err, 30, 'alert')
+	end
+	return res
+end
+local isfile = isfile or function(file)
+	local suc, res = pcall(function()
+		return readfile(file)
+	end)
+	return suc and res ~= nil and res ~= ''
+end
+local function downloadFile(path, func)
+	if not isfile(path) then
+		local suc, res = pcall(function()
+			return game:HttpGet('https://raw.githubusercontent.com/miacheats/VapeV4ForRoblox/'..readfile('newvape/profiles/commit.txt')..'/'..select(1, path:gsub('newvape/', '')), true)
+		end)
+		if not suc or res == '404: Not Found' then
+			error(res)
+		end
+		if path:find('.lua') then
+			res = '--This watermark is used to delete the file if its cached, remove it to make the file persist after vape updates.\n'..res
+		end
+		writefile(path, res)
+	end
+	return (func or readfile)(path)
+end
+local run = function(func)
+	func()
+end
+local queue_on_teleport = queue_on_teleport or function() end
+local cloneref = cloneref or function(obj)
+	return obj
+end
+
+local playersService = cloneref(game:GetService('Players'))
+local replicatedStorage = cloneref(game:GetService('ReplicatedStorage'))
+local runService = cloneref(game:GetService('RunService'))
+local inputService = cloneref(game:GetService('UserInputService'))
+local tweenService = cloneref(game:GetService('TweenService'))
+local lightingService = cloneref(game:GetService('Lighting'))
+local marketplaceService = cloneref(game:GetService('MarketplaceService'))
+local teleportService = cloneref(game:GetService('TeleportService'))
+local httpService = cloneref(game:GetService('HttpService'))
+local guiService = cloneref(game:GetService('GuiService'))
+local groupService = cloneref(game:GetService('GroupService'))
+local textChatService = cloneref(game:GetService('TextChatService'))
+local contextService = cloneref(game:GetService('ContextActionService'))
+local coreGui = cloneref(game:GetService('CoreGui'))
+
+local isnetworkowner = identifyexecutor and table.find({'AWP', 'Nihon'}, ({identifyexecutor()})[1]) and isnetworkowner or function()
+	return true
+end
+local gameCamera = workspace.CurrentCamera or workspace:FindFirstChildWhichIsA('Camera')
+local lplr = playersService.LocalPlayer
+local assetfunction = getcustomasset
+
+local vape = shared.vape
+local tween = vape.Libraries.tween
+local targetinfo = vape.Libraries.targetinfo
+local getfontsize = vape.Libraries.getfontsize
+local getcustomasset = vape.Libraries.getcustomasset
+
+run(function()
+	local Lighting = game:GetService("Lighting")
+	local Workspace = game:GetService("Workspace")
+	local UserSettingsService = UserSettings()
+
+	local LowGraphics
+	local changed = {}
+	local addedConnection
+	local originalQuality
+
+	local function getCategory()
+		return vape.Categories.World or vape.Categories.Render or vape.Categories.Utility
+	end
+
+	local function saveProperty(instance, property)
+		if not changed[instance] then
+			changed[instance] = {}
+		end
+
+		if changed[instance][property] == nil then
+			local success, value = pcall(function()
+				return instance[property]
+			end)
+
+			if success then
+				changed[instance][property] = value
+			end
+		end
+	end
+
+	local function setProperty(instance, property, value)
+		saveProperty(instance, property)
+
+		pcall(function()
+			instance[property] = value
+		end)
+	end
+
+	local function applyLowGraphics(instance)
+		if instance:IsA("BasePart") then
+			setProperty(instance, "Material", Enum.Material.SmoothPlastic)
+			setProperty(instance, "Reflectance", 0)
+			setProperty(instance, "CastShadow", false)
+
+		elseif instance:IsA("Decal") or instance:IsA("Texture") then
+			setProperty(instance, "Transparency", 1)
+
+		elseif instance:IsA("ParticleEmitter") then
+			setProperty(instance, "Enabled", false)
+			setProperty(instance, "Rate", 0)
+
+		elseif instance:IsA("Trail") or instance:IsA("Beam") then
+			setProperty(instance, "Enabled", false)
+
+		elseif instance:IsA("Fire") or instance:IsA("Smoke") or instance:IsA("Sparkles") then
+			setProperty(instance, "Enabled", false)
+
+		elseif instance:IsA("PostEffect") then
+			setProperty(instance, "Enabled", false)
+
+		elseif instance:IsA("Atmosphere") then
+			setProperty(instance, "Density", 0)
+			setProperty(instance, "Haze", 0)
+			setProperty(instance, "Glare", 0)
+
+		elseif instance:IsA("SurfaceAppearance") then
+			setProperty(instance, "ColorMap", "")
+			setProperty(instance, "MetalnessMap", "")
+			setProperty(instance, "NormalMap", "")
+			setProperty(instance, "RoughnessMap", "")
+		end
+	end
+
+	local function applyLighting()
+		setProperty(Lighting, "GlobalShadows", false)
+		setProperty(Lighting, "Brightness", 1)
+		setProperty(Lighting, "EnvironmentDiffuseScale", 0)
+		setProperty(Lighting, "EnvironmentSpecularScale", 0)
+		setProperty(Lighting, "FogEnd", 1000000)
+
+		pcall(function()
+			saveProperty(Lighting, "Technology")
+			Lighting.Technology = Enum.Technology.Compatibility
+		end)
+
+		local terrain = Workspace:FindFirstChildOfClass("Terrain")
+		if terrain then
+			setProperty(terrain, "WaterWaveSize", 0)
+			setProperty(terrain, "WaterWaveSpeed", 0)
+			setProperty(terrain, "WaterReflectance", 0)
+			setProperty(terrain, "WaterTransparency", 1)
+		end
+
+		pcall(function()
+			if not originalQuality then
+				originalQuality = UserSettingsService.GameSettings.SavedQualityLevel
+			end
+
+			UserSettingsService.GameSettings.SavedQualityLevel = Enum.SavedQualitySetting.QualityLevel1
+		end)
+	end
+
+	local function applyAll()
+		applyLighting()
+
+		for _, instance in ipairs(Workspace:GetDescendants()) do
+			applyLowGraphics(instance)
+		end
+
+		for _, instance in ipairs(Lighting:GetDescendants()) do
+			applyLowGraphics(instance)
+		end
+
+		if addedConnection then
+			addedConnection:Disconnect()
+			addedConnection = nil
+		end
+
+		addedConnection = Workspace.DescendantAdded:Connect(function(instance)
+			if LowGraphics and LowGraphics.Enabled then
+				task.defer(function()
+					if instance and instance.Parent then
+						applyLowGraphics(instance)
+					end
+				end)
+			end
+		end)
+	end
+
+	local function restoreAll()
+		if addedConnection then
+			addedConnection:Disconnect()
+			addedConnection = nil
+		end
+
+		for instance, properties in pairs(changed) do
+			if instance then
+				for property, value in pairs(properties) do
+					pcall(function()
+						instance[property] = value
+					end)
+				end
+			end
+		end
+
+		table.clear(changed)
+
+		pcall(function()
+			if originalQuality then
+				UserSettingsService.GameSettings.SavedQualityLevel = originalQuality
+			end
+		end)
+
+		originalQuality = nil
+	end
+
+	LowGraphics = getCategory():CreateModule({
+		Name = "Low Graphics mode",
+		Function = function(callback)
+			if callback then
+				applyAll()
+			else
+				restoreAll()
+			end
+		end,
+		Tooltip = "for potato devices"
+	})
+
+	LowGraphics:Clean(function()
+		restoreAll()
+	end)
+end)
+ 
+if vape and vape.CreateNotification then
+    vape:CreateNotification(
+        "Welcome Pieced",
+        "VAPE PRIVATE Loaded!",
+        9,
+        "warning"
+    )
+end
+
+																				
 run(function()
 	local Speedmeter
 	local label
