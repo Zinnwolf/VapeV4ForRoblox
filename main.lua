@@ -62,8 +62,7 @@ local supportedPlaceIds = {
 	[8768229691] = true,
 	[893973440] = true,
 	[8951451142] = true,
-
-	-- ids from your screenshot
+	[155615604] = true,
 	[11156779721] = true,
 	[11630038968] = true,
 	[12011959048] = true,
