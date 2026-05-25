@@ -10633,6 +10633,63 @@ run(function()
 	end)
 end)
 
+run(function()
+	local FPSUnlocker
+	local FPSSlider
+	local oldcap = 60
+
+	local function getcategory()
+		return vape.Categories.Legits or vape.Categories.Legit or vape.Categories.Utility
+	end
+
+	local function setcap(value)
+		if typeof(setfpscap) == "function" then
+			pcall(setfpscap, value)
+			return true
+		end
+
+		if typeof(set_fps_cap) == "function" then
+			pcall(set_fps_cap, value)
+			return true
+		end
+
+		return false
+	end
+
+	FPSUnlocker = getcategory():CreateModule({
+		Name = "FPSUnlocker",
+		Function = function(callback)
+			if callback then
+				local cap = FPSSlider and FPSSlider.Value or 1000
+
+				if not setcap(cap) then
+					if vape.Notify then
+						vape:Notify("FPSUnlocker", "Your executor does not support setfpscap.", 5)
+					end
+
+					if FPSUnlocker.Enabled then
+						FPSUnlocker:Toggle()
+					end
+				end
+			else
+				setcap(oldcap)
+			end
+		end,
+		Tooltip = "Unlocks Roblox FPS with a custom cap"
+	})
+
+	FPSSlider = FPSUnlocker:CreateSlider({
+		Name = "FPS Cap",
+		Min = 300,
+		Max = 1000,
+		Default = 1000,
+		Function = function(value)
+			if FPSUnlocker.Enabled then
+				setcap(value)
+			end
+		end
+	})
+end)																
 																
 run(function()
 	local Speedmeter
