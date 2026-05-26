@@ -10835,8 +10835,8 @@ end)
  
 if vape and vape.CreateNotification then
     vape:CreateNotification(
-        "Welcome Pieced",
-        "VAPE PRIVATE Loaded!",
+        "Vape",
+        "Have Fun!",
         9,
         "warning"
     )
