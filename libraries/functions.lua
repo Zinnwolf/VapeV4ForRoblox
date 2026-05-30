@@ -5,6 +5,7 @@ local ownerUserIds = {
 }
 
 local privateUserIds = {
+	[9296308871] = true
 }
 
 local tagSettings = {
